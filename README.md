@@ -5,8 +5,8 @@ Pi package for reviewing generated HTML plans in the browser.
 ## Features
 
 - Opens a local HTML plan in a browser review surface
-- Lets you comment on stable plan blocks
-- Captures an overall review summary
+- Lets you click a plan block and comment inline
+- Keeps the sidebar minimal with overall review + compact comment list
 - Saves submissions as JSON and Markdown
 - Sends the submitted review back into the Pi session
 
