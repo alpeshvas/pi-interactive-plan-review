@@ -5,7 +5,8 @@
   "description": "Pi package for reviewing generated HTML plans in the browser with inline feedback submission.",
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

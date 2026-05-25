@@ -94,15 +94,15 @@ function buildSidebarMarkup(sourcePath: string) {
 		`    <p>${escapeHtml(sourcePath)}</p>`,
 		'  </div>',
 		'  <div id="pi-plan-review-toolbar">',
-		'    <button id="pi-toggle-mode" data-active="true">Review mode</button>',
-		'    <button id="pi-add-general">Add general comment</button>',
-		'    <button id="pi-submit" data-kind="primary">Submit review</button>',
+		'    <button id="pi-toggle-mode" data-active="true">Review</button>',
+		'    <button id="pi-add-general">Note</button>',
+		'    <button id="pi-submit" data-kind="primary">Submit</button>',
 		'  </div>',
 		'  <div id="pi-plan-review-body">',
 		'    <div id="pi-plan-review-status"></div>',
 		'    <section class="pi-review-section">',
-		'      <label class="pi-review-label" for="pi-review-summary">Overall review</label>',
-		'      <textarea id="pi-review-summary" class="pi-review-textarea pi-review-summary" placeholder="Overall take: approve, concerns, blockers, sequencing feedback, open questions..."></textarea>',
+		'      <label class="pi-review-label" for="pi-review-summary">Overall</label>',
+		'      <textarea id="pi-review-summary" class="pi-review-textarea pi-review-summary" placeholder="Overall take..."></textarea>',
 		'    </section>',
 		'    <section class="pi-review-section">',
 		'      <div class="pi-review-label">Comments</div>',
@@ -143,10 +143,10 @@ function buildComposerMarkup(title,existingComment){return '<div class="pi-inlin
 function upsertAnnotation(block,comment){const existingIndex=state.editingId?state.annotations.findIndex((annotation)=>annotation.id===state.editingId):-1;const payload={id:existingIndex>=0?state.annotations[existingIndex].id:crypto.randomUUID(),targetId:block?.dataset?.reviewId||null,targetTitle:block?.dataset?.reviewTitle||'General comment',selector:block?reviewSelector(block):null,textSnippet:block?textPreview(block):null,comment,createdAt:new Date().toISOString()};if(existingIndex>=0){state.annotations.splice(existingIndex,1,payload);}else{state.annotations.push(payload);}renderAnnotations();updateBadges();}
 function positionComposer(){if(!state.composer||!state.composerAnchor||state.composerMode!=='block')return;const pop=state.composer;const rect=state.composerAnchor.getBoundingClientRect();const viewportWidth=window.innerWidth;const viewportHeight=window.innerHeight;const reviewPanel=document.getElementById('pi-plan-review-root');const panelRect=reviewPanel?.getBoundingClientRect();const contentRight=panelRect?Math.max(12,panelRect.left-COMPOSER_GAP):viewportWidth-12;const contentWidth=Math.max(280,contentRight-24);const panelWidth=Math.min(Math.max(COMPOSER_WIDTH,280),Math.min(360,contentWidth));pop.style.width=panelWidth+'px';pop.style.maxWidth='calc(100vw - 24px)';const popRect=pop.getBoundingClientRect();const width=popRect.width||panelWidth;const height=popRect.height||260;const rightSpace=Math.max(0,contentRight-rect.right-COMPOSER_GAP);const leftSpace=Math.max(0,rect.left-COMPOSER_GAP-12);const belowSpace=Math.max(0,viewportHeight-rect.bottom-COMPOSER_GAP-12);const aboveSpace=Math.max(0,rect.top-COMPOSER_GAP-12);let placement='bottom';if(belowSpace>=height){placement='bottom';}else if(aboveSpace>=height){placement='top';}else if(leftSpace>=width){placement='left';}else if(rightSpace>=width){placement='right';}else{const spaces=[['bottom',belowSpace],['top',aboveSpace],['left',leftSpace],['right',rightSpace]].sort((a,b)=>b[1]-a[1]);placement=spaces[0][0];}const clickX=state.lastClick?.x ?? (rect.left + rect.width / 2);let top=rect.bottom+COMPOSER_GAP;let left=clickX-(width/2);if(placement==='top'){top=rect.top-height-COMPOSER_GAP;left=clickX-(width/2);}else if(placement==='left'){left=rect.left-width-COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}else if(placement==='right'){left=rect.right+COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}left=Math.min(Math.max(12,left),Math.max(12,contentRight-width));top=Math.min(Math.max(12,top),viewportHeight-height-12);pop.style.left=left+'px';pop.style.top=top+'px';pop.dataset.placement=placement;}
 function openComposer(block,annotation){if(!block)return;clearSelected();closeComposer();state.selected=block;block.classList.add('pi-review-selected');const wrapper=document.createElement('div');wrapper.className='pi-inline-composer';wrapper.innerHTML=buildComposerMarkup(block.dataset.reviewTitle||block.dataset.reviewId||'Block',annotation?.comment||'');document.body.appendChild(wrapper);state.composer=wrapper;state.composerAnchor=block;state.composerMode='block';state.editingId=annotation?.id||null;const textarea=wrapper.querySelector('.pi-inline-textarea');const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}upsertAnnotation(block,comment);closeComposer();clearStatus();showStatus('Comment saved.','success');clearSelected();};wrapper.querySelector('.pi-inline-save')?.addEventListener('click',save);wrapper.querySelector('.pi-inline-cancel')?.addEventListener('click',()=>{closeComposer();clearSelected();});wrapper.querySelector('.pi-inline-close')?.addEventListener('click',()=>{closeComposer();clearSelected();});textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();closeComposer();clearSelected();}});positionComposer();window.addEventListener('resize',positionComposer);window.addEventListener('scroll',positionComposer,true);textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);}
-function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty">No comments yet. Click a block to comment inline.</div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{const item=document.createElement('article');item.className='pi-review-annotation-item';item.innerHTML='<header><button type="button" class="pi-review-link">'+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+'</button><div class="pi-review-item-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" data-kind="danger" class="pi-review-remove">Remove</button></div></header><p>'+escapeHtml(annotation.comment)+'</p>';item.querySelector('.pi-review-link')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-edit')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});annotationsEl.appendChild(item);});}
+function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty">No notes yet.</div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{const item=document.createElement('article');item.className='pi-review-annotation-item';item.innerHTML='<header><button type="button" class="pi-review-link">'+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+'</button><div class="pi-review-item-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" data-kind="danger" class="pi-review-remove">Remove</button></div></header><p>'+escapeHtml(annotation.comment)+'</p>';item.querySelector('.pi-review-link')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-edit')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});annotationsEl.appendChild(item);});}
 function addGeneralComment(){const existing={id:crypto.randomUUID(),targetId:null,targetTitle:'General comment',comment:'',textSnippet:null};closeComposer();clearSelected();const drawer=document.createElement('div');drawer.className='pi-global-composer';drawer.innerHTML='<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>General comment</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="General feedback about the plan"></textarea><div class="pi-inline-actions"><button type="button" class="pi-inline-save">Save</button><button type="button" class="pi-inline-cancel">Cancel</button></div></div>';document.body.appendChild(drawer);state.composer=drawer;state.composerMode='general';state.editingId=existing.id;const textarea=drawer.querySelector('.pi-inline-textarea');const close=()=>{closeComposer();};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}state.annotations.push({...existing,comment,createdAt:new Date().toISOString()});renderAnnotations();close();clearStatus();showStatus('General comment saved.','success');};drawer.querySelector('.pi-inline-save')?.addEventListener('click',save);drawer.querySelector('.pi-inline-cancel')?.addEventListener('click',close);drawer.querySelector('.pi-inline-close')?.addEventListener('click',close);textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();close();}});textarea.focus();}
 async function submitReview(){showStatus('Submitting review...','info');try{const payload={planFile:window.__PI_HTML_REVIEW__?.sourcePath,sourcePath:window.__PI_HTML_REVIEW__?.sourcePath,submittedAt:new Date().toISOString(),reviewSummary:summaryEl.value.trim(),annotations:state.annotations};const response=await fetch('/api/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw new Error(result.error||'Submission failed');showStatus('Submitted '+result.annotationCount+' comments.','success');}catch(error){showStatus(error?.message||'Submission failed','error');}}
-toggleButton.addEventListener('click',()=>{state.reviewMode=!state.reviewMode;toggleButton.dataset.active=String(state.reviewMode);toggleButton.textContent=state.reviewMode?'Review mode':'Browse mode';clearHover();if(!state.reviewMode){closeComposer();clearSelected();}});
+toggleButton.addEventListener('click',()=>{state.reviewMode=!state.reviewMode;toggleButton.dataset.active=String(state.reviewMode);toggleButton.textContent=state.reviewMode?'Review':'Browse';clearHover();if(!state.reviewMode){closeComposer();clearSelected();}});
 document.getElementById('pi-add-general').addEventListener('click',addGeneralComment);
 document.getElementById('pi-submit').addEventListener('click',submitReview);
 document.addEventListener('mouseover',(event)=>{if(!state.reviewMode)return;const el=event.target instanceof HTMLElement?event.target.closest('[data-review-id]'):null;if(!el||el.closest('#pi-plan-review-root'))return;clearHover();state.hovered=el;el.classList.add('pi-review-hover');},true);
@@ -165,36 +165,43 @@ function injectReviewClient(html: string, config: { sourcePath: string }): strin
 	const script = buildInjectedScript();
 	const injected = `${configScript}
 <style>
-body{padding-right:min(28vw,360px)!important;padding-bottom:0!important;box-sizing:border-box;}
+body{padding-right:min(28vw,400px)!important;padding-bottom:0!important;box-sizing:border-box;}
 #pi-plan-review-root *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-#pi-plan-review-root{position:fixed;top:0;right:0;bottom:0;width:min(28vw,360px);min-width:300px;z-index:2147483647;color:#0f172a}
-#pi-plan-review-panel{height:100%;display:flex;flex-direction:column;background:rgba(255,255,255,.97);border-left:1px solid rgba(148,163,184,.28);box-shadow:0 20px 48px rgba(15,23,42,.12)}
-#pi-plan-review-header{padding:16px 18px 14px;border-bottom:1px solid rgba(148,163,184,.26);background:linear-gradient(180deg,#ffffff,#f8fafc)}
-#pi-plan-review-header h1{margin:4px 0 6px;font-size:21px;line-height:1.15}
-#pi-plan-review-header p{margin:0;color:#475569;font-size:12px;word-break:break-word}
-#pi-plan-review-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid rgba(148,163,184,.26);background:#fff}
-#pi-plan-review-root button{border:1px solid rgba(148,163,184,.35);background:#fff;color:#0f172a;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer}
+#pi-plan-review-root{position:fixed;top:0;right:0;bottom:0;width:min(28vw,400px);min-width:340px;z-index:2147483647;color:#ecf2f8}
+#pi-plan-review-panel{height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#162132,#0f172a);border-left:1px solid rgba(103,210,231,.14)}
+#pi-plan-review-header{padding:16px;border-bottom:1px solid rgba(103,210,231,.10)}
+#pi-plan-review-header h1{margin:6px 0 4px;font-size:22px;line-height:1.2;font-weight:650;color:#e6edf5}
+#pi-plan-review-header p{margin:0;color:#8ea0b8;font-size:11px;line-height:1.45;word-break:break-word}
+#pi-plan-review-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid rgba(103,210,231,.10)}
+#pi-plan-review-root button{border:1px solid rgba(148,163,184,.24);background:rgba(255,255,255,.04);color:#d7e0ea;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer}
+#pi-plan-review-root button:hover{border-color:rgba(103,210,231,.45);color:#ecf2f8}
 #pi-plan-review-root button[data-kind="primary"]{background:#0f766e;border-color:#0f766e;color:#fff}
-#pi-plan-review-root button[data-kind="danger"]{color:#be123c}
-#pi-plan-review-root button[data-active="true"]{outline:2px solid rgba(15,118,110,.18)}
-#pi-plan-review-body{display:flex;flex-direction:column;gap:14px;overflow:auto;padding:16px;background:#f8fafc}
-#pi-plan-review-status{display:none;padding:10px 12px;border-radius:12px;font-size:12px}
+#pi-plan-review-root button[data-kind="primary"]:hover{background:#115e59;border-color:#115e59}
+#pi-plan-review-root button[data-kind="danger"]{color:#fda4af}
+#pi-plan-review-root button[data-active="true"]{border-color:#67d2e7;color:#67d2e7}
+#pi-plan-review-body{display:flex;flex-direction:column;gap:16px;overflow:auto;padding:16px}
+#pi-plan-review-status{display:none;padding:9px 10px;border-radius:10px;font-size:12px;line-height:1.4}
 #pi-plan-review-status[data-visible="true"]{display:block}
-#pi-plan-review-status[data-kind="info"]{background:#ecfeff;color:#155e75}
-#pi-plan-review-status[data-kind="success"]{background:#ecfdf5;color:#065f46}
-#pi-plan-review-status[data-kind="error"]{background:#fff1f2;color:#9f1239}
-.pi-review-kicker{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0f766e}
+#pi-plan-review-status[data-kind="info"]{background:rgba(103,210,231,.08);color:#8ea0b8}
+#pi-plan-review-status[data-kind="success"]{background:rgba(15,118,110,.18);color:#5eead4}
+#pi-plan-review-status[data-kind="error"]{background:rgba(190,18,60,.18);color:#fda4af}
+.pi-review-kicker{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#67d2e7}
 .pi-review-section{display:grid;gap:8px}
-.pi-review-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#475569}
-.pi-review-textarea{width:100%;min-height:120px;padding:12px;border:1px solid rgba(148,163,184,.35);border-radius:14px;background:#fff;color:#0f172a;font-size:13px;resize:vertical}
-.pi-review-summary{min-height:90px}
-.pi-review-empty{padding:12px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:#fff;color:#64748b;font-size:13px}
+.pi-review-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8ea0b8}
+.pi-review-textarea{width:100%;min-height:140px;padding:12px 13px;border:1px solid rgba(103,210,231,.32);border-radius:12px;background:rgba(9,14,24,.72);color:#ecf2f8;font-size:13px;line-height:1.5;resize:vertical}
+.pi-review-textarea::placeholder{color:#64748b}
+.pi-review-textarea:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 3px rgba(103,210,231,.14)}
+.pi-review-summary{min-height:140px}
+.pi-review-empty{padding:10px 0;color:#64748b;font-size:13px}
 .pi-review-annotations{display:flex;flex-direction:column;gap:8px}
-.pi-review-annotation-item{padding:10px 12px;border:1px solid rgba(148,163,184,.28);border-radius:12px;background:#fff}
-.pi-review-annotation-item header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px}
-.pi-review-annotation-item p{margin:0;font-size:12px;line-height:1.45;color:#0f172a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pi-review-annotation-item{padding:10px 0;border-top:1px solid rgba(103,210,231,.10)}
+.pi-review-annotation-item:first-child{padding-top:0;border-top:none}
+.pi-review-annotation-item header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:4px}
+.pi-review-annotation-item p{margin:0;font-size:12px;line-height:1.5;color:#d7e0ea;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .pi-review-link,.pi-review-remove,.pi-review-edit{padding:0!important;border:none!important;background:none!important;border-radius:0!important;font-size:11px!important}
-.pi-review-link{color:#0f766e!important;text-align:left;font-weight:700!important}
+.pi-review-link{color:#67d2e7!important;text-align:left;font-weight:600!important}
+.pi-review-remove{color:#fda4af!important}
+.pi-review-edit{color:#8ea0b8!important}
 .pi-review-item-actions{display:flex;gap:8px;align-items:center}
 [data-review-id]{scroll-margin-top:32px;position:relative}
 .pi-review-hover{outline:2px dashed rgba(180,83,9,.75)!important;outline-offset:4px!important}
@@ -217,7 +224,7 @@ body{padding-right:min(28vw,360px)!important;padding-bottom:0!important;box-sizi
 .pi-inline-composer .pi-inline-save{background:#0f766e!important;border-color:#0f766e!important;color:#fff!important}
 .pi-inline-composer .pi-inline-cancel{background:rgba(255,255,255,.04)!important;border-color:rgba(148,163,184,.24)!important;color:#d7e0ea!important}
 .pi-inline-hint{margin-top:8px;font-size:11px;color:#8ea0b8}
-@media (max-width: 960px){body{padding-right:0!important;padding-bottom:42vh!important}#pi-plan-review-root{left:0;right:0;top:auto;width:100vw;min-width:0;height:42vh}.pi-inline-composer{left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}.pi-inline-composer::before{display:none}.pi-global-composer{left:12px;right:12px;bottom:12px;width:auto}}
+@media (max-width: 960px){body{padding-right:0!important;padding-bottom:40vh!important}#pi-plan-review-root{left:0;right:0;top:auto;width:100vw;min-width:0;height:40vh}.pi-inline-composer{left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}.pi-inline-composer::before{display:none}.pi-global-composer{left:12px;right:12px;bottom:12px;width:auto}}
 </style>
 <div id="pi-plan-review-root">${sidebarMarkup}</div>
 <script>${script}</script>`;
