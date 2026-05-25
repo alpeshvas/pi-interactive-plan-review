@@ -86,28 +86,24 @@ function toMarkdown(payload: any, jsonPath: string): string {
 }
 
 function buildSidebarMarkup(sourcePath: string) {
+	const filename = sourcePath.split("/").pop() || sourcePath;
 	return [
 		'<aside id="pi-plan-review-panel">',
 		'  <div id="pi-plan-review-header">',
-		'    <div class="pi-review-kicker">Plan review</div>',
-		'    <h1>Review this plan</h1>',
-		`    <p>${escapeHtml(sourcePath)}</p>`,
+		`    <div class="pi-review-filename" title="${escapeHtml(sourcePath)}">${escapeHtml(filename)}</div>`,
+		'    <button id="pi-add-general" class="pi-review-ghost" title="Add a general comment">+ Note</button>',
 		'  </div>',
-		'  <div id="pi-plan-review-toolbar">',
-		'    <button id="pi-toggle-mode" data-active="true">Review</button>',
-		'    <button id="pi-add-general">Note</button>',
-		'    <button id="pi-submit" data-kind="primary">Submit</button>',
+		'  <div id="pi-plan-review-comments">',
+		'    <div id="pi-review-annotations" class="pi-review-annotations"></div>',
 		'  </div>',
-		'  <div id="pi-plan-review-body">',
-		'    <div id="pi-plan-review-status"></div>',
-		'    <section class="pi-review-section">',
-		'      <label class="pi-review-label" for="pi-review-summary">Overall</label>',
-		'      <textarea id="pi-review-summary" class="pi-review-textarea pi-review-summary" placeholder="Overall take..."></textarea>',
-		'    </section>',
-		'    <section class="pi-review-section">',
-		'      <div class="pi-review-label">Comments</div>',
-		'      <div id="pi-review-annotations" class="pi-review-annotations"></div>',
-		'    </section>',
+		'  <div id="pi-plan-review-footer">',
+		'    <div id="pi-plan-review-status" role="status" aria-live="polite"></div>',
+		'    <label class="pi-review-label" for="pi-review-summary">Overall</label>',
+		'    <textarea id="pi-review-summary" class="pi-review-textarea pi-review-summary" placeholder="Overall take (optional)"></textarea>',
+		'    <div class="pi-review-footer-actions">',
+		'      <button id="pi-discard-all" class="pi-review-ghost" hidden>Discard all</button>',
+		'      <button id="pi-submit" data-kind="primary">Submit</button>',
+		'    </div>',
 		'  </div>',
 		'</aside>',
 	].join("");
@@ -117,17 +113,18 @@ function buildInjectedScript() {
 	return String.raw`(()=>{
 const root=document.getElementById('pi-plan-review-root');
 if(!root)return;
-const state={reviewMode:true,selected:null,hovered:null,annotations:[],blocks:[],composer:null,editingId:null,composerAnchor:null,composerMode:null,lastClick:null};
+const state={reviewMode:true,selected:null,hovered:null,annotations:[],blocks:[],composer:null,editingId:null,composerAnchor:null,composerMode:null,lastClick:null,statusTimer:null,recentId:null,recentTimer:null};
 const statusEl=document.getElementById('pi-plan-review-status');
 const summaryEl=document.getElementById('pi-review-summary');
 const annotationsEl=document.getElementById('pi-review-annotations');
-const toggleButton=document.getElementById('pi-toggle-mode');
+const submitButton=document.getElementById('pi-submit');
+const discardButton=document.getElementById('pi-discard-all');
 const COMPOSER_GAP=14;
 const COMPOSER_WIDTH=320;
 function slugify(value){return (value||'review').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'review';}
 function escapeHtml(value){return String(value||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');}
-function showStatus(message,kind){statusEl.textContent=message;statusEl.dataset.visible='true';statusEl.dataset.kind=kind||'info';}
-function clearStatus(){statusEl.dataset.visible='false';statusEl.dataset.kind='info';statusEl.textContent='';}
+function showStatus(message,kind){statusEl.textContent=message;statusEl.dataset.visible='true';statusEl.dataset.kind=kind||'info';if(state.statusTimer){clearTimeout(state.statusTimer);state.statusTimer=null;}if(kind==='success'||kind==='info'){state.statusTimer=setTimeout(clearStatus,1800);}}
+function clearStatus(){statusEl.dataset.visible='false';statusEl.dataset.kind='info';statusEl.textContent='';if(state.statusTimer){clearTimeout(state.statusTimer);state.statusTimer=null;}}
 function textPreview(el){const text=(el?.innerText||el?.textContent||'').replace(/\s+/g,' ').trim();return text.slice(0,180);}
 function findHeading(el){return el?.querySelector('h1,h2,h3,h4,.section-label,.eyebrow,.pill,strong');}
 function reviewTitle(el){return el?.dataset.reviewTitle||findHeading(el)?.textContent?.replace(/\s+/g,' ').trim()||el?.getAttribute('aria-label')||el?.tagName?.toLowerCase()||'Block';}
@@ -137,25 +134,28 @@ function clearHover(){if(state.hovered){state.hovered.classList.remove('pi-revie
 function clearSelected(){if(state.selected){state.selected.classList.remove('pi-review-selected');state.selected=null;}}
 function closeComposer(){if(state.composer){state.composer.remove();state.composer=null;}state.editingId=null;state.composerAnchor=null;state.composerMode=null;window.removeEventListener('resize',positionComposer);window.removeEventListener('scroll',positionComposer,true);}
 function commentCountForBlock(block){return state.annotations.filter((annotation)=>annotation.targetId===block?.dataset?.reviewId).length;}
-function syncReviewMeta(){}
-function updateBadges(){state.blocks.forEach((block)=>{let badge=block.querySelector(':scope > .pi-review-badge');const count=commentCountForBlock(block);if(count===0){badge?.remove();return;}if(!badge){badge=document.createElement('div');badge.className='pi-review-badge';block.appendChild(badge);}badge.textContent=String(count);});}
-function buildComposerMarkup(title,existingComment){return '<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>'+escapeHtml(title)+'</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="What should change in this part of the plan?">'+escapeHtml(existingComment||'')+'</textarea><div class="pi-inline-actions"><button type="button" class="pi-inline-save">Save</button><button type="button" class="pi-inline-cancel">Cancel</button></div><div class="pi-inline-hint">Cmd/Ctrl+Enter to save · Esc to cancel</div></div>';}
-function upsertAnnotation(block,comment){const existingIndex=state.editingId?state.annotations.findIndex((annotation)=>annotation.id===state.editingId):-1;const payload={id:existingIndex>=0?state.annotations[existingIndex].id:crypto.randomUUID(),targetId:block?.dataset?.reviewId||null,targetTitle:block?.dataset?.reviewTitle||'General comment',selector:block?reviewSelector(block):null,textSnippet:block?textPreview(block):null,comment,createdAt:new Date().toISOString()};if(existingIndex>=0){state.annotations.splice(existingIndex,1,payload);}else{state.annotations.push(payload);}renderAnnotations();updateBadges();}
+function syncReviewMeta(){const count=state.annotations.length;if(submitButton){submitButton.textContent=count>0?('Submit '+count+' '+(count===1?'comment':'comments')):'Submit';submitButton.disabled=count===0&&!summaryEl.value.trim();}if(discardButton){discardButton.hidden=count===0;}}
+function updateBadges(){state.blocks.forEach((block)=>{let badge=block.querySelector(':scope > .pi-review-badge');const count=commentCountForBlock(block);if(count===0){badge?.remove();return;}if(!badge){badge=document.createElement('div');badge.className='pi-review-badge';block.appendChild(badge);}badge.textContent=String(count);});syncReviewMeta();}
+function buildComposerMarkup(title,existingComment){return '<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>'+escapeHtml(title)+'</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="What should change in this part of the plan?">'+escapeHtml(existingComment||'')+'</textarea><div class="pi-inline-actions"><div class="pi-inline-hint">⌘↵ save · Esc cancel</div><button type="button" class="pi-inline-save">Save</button></div></div>';}
+function upsertAnnotation(block,comment){const existingIndex=state.editingId?state.annotations.findIndex((annotation)=>annotation.id===state.editingId):-1;const payload={id:existingIndex>=0?state.annotations[existingIndex].id:crypto.randomUUID(),targetId:block?.dataset?.reviewId||null,targetTitle:block?.dataset?.reviewTitle||'General comment',selector:block?reviewSelector(block):null,textSnippet:block?textPreview(block):null,comment,createdAt:new Date().toISOString()};if(existingIndex>=0){state.annotations.splice(existingIndex,1,payload);}else{state.annotations.push(payload);}state.recentId=payload.id;if(state.recentTimer){clearTimeout(state.recentTimer);}state.recentTimer=setTimeout(()=>{state.recentId=null;renderAnnotations();},4000);renderAnnotations();updateBadges();}
 function positionComposer(){if(!state.composer||!state.composerAnchor||state.composerMode!=='block')return;const pop=state.composer;const rect=state.composerAnchor.getBoundingClientRect();const viewportWidth=window.innerWidth;const viewportHeight=window.innerHeight;const reviewPanel=document.getElementById('pi-plan-review-root');const panelRect=reviewPanel?.getBoundingClientRect();const contentRight=panelRect?Math.max(12,panelRect.left-COMPOSER_GAP):viewportWidth-12;const contentWidth=Math.max(280,contentRight-24);const panelWidth=Math.min(Math.max(COMPOSER_WIDTH,280),Math.min(360,contentWidth));pop.style.width=panelWidth+'px';pop.style.maxWidth='calc(100vw - 24px)';const popRect=pop.getBoundingClientRect();const width=popRect.width||panelWidth;const height=popRect.height||260;const rightSpace=Math.max(0,contentRight-rect.right-COMPOSER_GAP);const leftSpace=Math.max(0,rect.left-COMPOSER_GAP-12);const belowSpace=Math.max(0,viewportHeight-rect.bottom-COMPOSER_GAP-12);const aboveSpace=Math.max(0,rect.top-COMPOSER_GAP-12);let placement='bottom';if(belowSpace>=height){placement='bottom';}else if(aboveSpace>=height){placement='top';}else if(leftSpace>=width){placement='left';}else if(rightSpace>=width){placement='right';}else{const spaces=[['bottom',belowSpace],['top',aboveSpace],['left',leftSpace],['right',rightSpace]].sort((a,b)=>b[1]-a[1]);placement=spaces[0][0];}const clickX=state.lastClick?.x ?? (rect.left + rect.width / 2);let top=rect.bottom+COMPOSER_GAP;let left=clickX-(width/2);if(placement==='top'){top=rect.top-height-COMPOSER_GAP;left=clickX-(width/2);}else if(placement==='left'){left=rect.left-width-COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}else if(placement==='right'){left=rect.right+COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}left=Math.min(Math.max(12,left),Math.max(12,contentRight-width));top=Math.min(Math.max(12,top),viewportHeight-height-12);pop.style.left=left+'px';pop.style.top=top+'px';pop.dataset.placement=placement;}
-function openComposer(block,annotation){if(!block)return;clearSelected();closeComposer();state.selected=block;block.classList.add('pi-review-selected');const wrapper=document.createElement('div');wrapper.className='pi-inline-composer';wrapper.innerHTML=buildComposerMarkup(block.dataset.reviewTitle||block.dataset.reviewId||'Block',annotation?.comment||'');document.body.appendChild(wrapper);state.composer=wrapper;state.composerAnchor=block;state.composerMode='block';state.editingId=annotation?.id||null;const textarea=wrapper.querySelector('.pi-inline-textarea');const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}upsertAnnotation(block,comment);closeComposer();clearStatus();showStatus('Comment saved.','success');clearSelected();};wrapper.querySelector('.pi-inline-save')?.addEventListener('click',save);wrapper.querySelector('.pi-inline-cancel')?.addEventListener('click',()=>{closeComposer();clearSelected();});wrapper.querySelector('.pi-inline-close')?.addEventListener('click',()=>{closeComposer();clearSelected();});textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();closeComposer();clearSelected();}});positionComposer();window.addEventListener('resize',positionComposer);window.addEventListener('scroll',positionComposer,true);textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);}
-function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty">No notes yet.</div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{const item=document.createElement('article');item.className='pi-review-annotation-item';item.innerHTML='<header><button type="button" class="pi-review-link">'+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+'</button><div class="pi-review-item-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" data-kind="danger" class="pi-review-remove">Remove</button></div></header><p>'+escapeHtml(annotation.comment)+'</p>';item.querySelector('.pi-review-link')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-edit')?.addEventListener('click',()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}});item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});annotationsEl.appendChild(item);});}
-function addGeneralComment(){const existing={id:crypto.randomUUID(),targetId:null,targetTitle:'General comment',comment:'',textSnippet:null};closeComposer();clearSelected();const drawer=document.createElement('div');drawer.className='pi-global-composer';drawer.innerHTML='<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>General comment</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="General feedback about the plan"></textarea><div class="pi-inline-actions"><button type="button" class="pi-inline-save">Save</button><button type="button" class="pi-inline-cancel">Cancel</button></div></div>';document.body.appendChild(drawer);state.composer=drawer;state.composerMode='general';state.editingId=existing.id;const textarea=drawer.querySelector('.pi-inline-textarea');const close=()=>{closeComposer();};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}state.annotations.push({...existing,comment,createdAt:new Date().toISOString()});renderAnnotations();close();clearStatus();showStatus('General comment saved.','success');};drawer.querySelector('.pi-inline-save')?.addEventListener('click',save);drawer.querySelector('.pi-inline-cancel')?.addEventListener('click',close);drawer.querySelector('.pi-inline-close')?.addEventListener('click',close);textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();close();}});textarea.focus();}
-async function submitReview(){showStatus('Submitting review...','info');try{const payload={planFile:window.__PI_HTML_REVIEW__?.sourcePath,sourcePath:window.__PI_HTML_REVIEW__?.sourcePath,submittedAt:new Date().toISOString(),reviewSummary:summaryEl.value.trim(),annotations:state.annotations};const response=await fetch('/api/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw new Error(result.error||'Submission failed');showStatus('Submitted '+result.annotationCount+' comments.','success');}catch(error){showStatus(error?.message||'Submission failed','error');}}
-toggleButton.addEventListener('click',()=>{state.reviewMode=!state.reviewMode;toggleButton.dataset.active=String(state.reviewMode);toggleButton.textContent=state.reviewMode?'Review':'Browse';clearHover();if(!state.reviewMode){closeComposer();clearSelected();}});
-document.getElementById('pi-add-general').addEventListener('click',addGeneralComment);
-document.getElementById('pi-submit').addEventListener('click',submitReview);
+function openComposer(block,annotation){if(!block)return;clearSelected();closeComposer();state.selected=block;block.classList.add('pi-review-selected');const wrapper=document.createElement('div');wrapper.className='pi-inline-composer';wrapper.innerHTML=buildComposerMarkup(block.dataset.reviewTitle||block.dataset.reviewId||'Block',annotation?.comment||'');document.body.appendChild(wrapper);state.composer=wrapper;state.composerAnchor=block;state.composerMode='block';state.editingId=annotation?.id||null;const textarea=wrapper.querySelector('.pi-inline-textarea');const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}upsertAnnotation(block,comment);closeComposer();clearStatus();showStatus('Comment saved.','success');clearSelected();};wrapper.querySelector('.pi-inline-save')?.addEventListener('click',save);wrapper.querySelector('.pi-inline-close')?.addEventListener('click',()=>{closeComposer();clearSelected();});textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();closeComposer();clearSelected();}});positionComposer();window.addEventListener('resize',positionComposer);window.addEventListener('scroll',positionComposer,true);textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);}
+function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty"><div class="pi-review-empty-icon">·</div><div>Click any block in the plan to leave a note.</div></div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{const item=document.createElement('article');item.className='pi-comment-card';if(annotation.id===state.recentId){item.dataset.recent='true';}item.innerHTML='<button type="button" class="pi-comment-anchor">→ '+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+'</button><p class="pi-comment-body">'+escapeHtml(annotation.comment)+'</p><div class="pi-comment-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" class="pi-review-remove">Remove</button></div>';const focusBlock=()=>{if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}};item.querySelector('.pi-comment-anchor')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-edit')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});annotationsEl.appendChild(item);});}
+function addGeneralComment(){const existing={id:crypto.randomUUID(),targetId:null,targetTitle:'General comment',comment:'',textSnippet:null};closeComposer();clearSelected();const drawer=document.createElement('div');drawer.className='pi-global-composer';drawer.innerHTML='<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>General comment</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="General feedback about the plan"></textarea><div class="pi-inline-actions"><div class="pi-inline-hint">⌘↵ save · Esc cancel</div><button type="button" class="pi-inline-save">Save</button></div></div>';document.body.appendChild(drawer);state.composer=drawer;state.composerMode='general';state.editingId=existing.id;const textarea=drawer.querySelector('.pi-inline-textarea');const close=()=>{closeComposer();};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}state.annotations.push({...existing,comment,createdAt:new Date().toISOString()});renderAnnotations();close();clearStatus();showStatus('General comment saved.','success');};drawer.querySelector('.pi-inline-save')?.addEventListener('click',save);drawer.querySelector('.pi-inline-close')?.addEventListener('click',close);textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();close();}});textarea.focus();}
+function showSubmittedOverlay(count){const overlay=document.createElement('div');overlay.id='pi-submitted-overlay';overlay.innerHTML='<div class="pi-submitted-card"><div class="pi-submitted-check">✓</div><h2>Review submitted</h2><p>'+count+' '+(count===1?'comment':'comments')+' sent back to Pi.</p><p class="pi-submitted-hint">You can close this tab.</p><button type="button" id="pi-submitted-close">Close tab</button></div>';document.body.appendChild(overlay);const tryClose=()=>{try{window.close();}catch(e){}};document.getElementById('pi-submitted-close')?.addEventListener('click',tryClose);setTimeout(tryClose,400);}
+async function submitReview(){if(submitButton)submitButton.disabled=true;showStatus('Submitting...','info');try{const payload={planFile:window.__PI_HTML_REVIEW__?.sourcePath,sourcePath:window.__PI_HTML_REVIEW__?.sourcePath,submittedAt:new Date().toISOString(),reviewSummary:summaryEl.value.trim(),annotations:state.annotations};const response=await fetch('/api/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw new Error(result.error||'Submission failed');closeComposer();clearSelected();showSubmittedOverlay(result.annotationCount||0);}catch(error){if(submitButton)submitButton.disabled=false;showStatus(error?.message||'Submission failed','error');}}
+document.getElementById('pi-add-general')?.addEventListener('click',addGeneralComment);
+submitButton?.addEventListener('click',submitReview);
+summaryEl?.addEventListener('input',syncReviewMeta);
+discardButton?.addEventListener('click',()=>{if(state.annotations.length===0)return;if(!confirm('Discard all '+state.annotations.length+' comments?'))return;state.annotations=[];renderAnnotations();updateBadges();showStatus('All comments discarded.','info');});
+document.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){const inPanel=event.target instanceof HTMLElement&&event.target.closest('#pi-plan-review-root');const inComposer=event.target instanceof HTMLElement&&(event.target.closest('.pi-inline-composer')||event.target.closest('.pi-global-composer'));if(inPanel&&!inComposer){event.preventDefault();submitReview();}}});
 document.addEventListener('mouseover',(event)=>{if(!state.reviewMode)return;const el=event.target instanceof HTMLElement?event.target.closest('[data-review-id]'):null;if(!el||el.closest('#pi-plan-review-root'))return;clearHover();state.hovered=el;el.classList.add('pi-review-hover');},true);
 document.addEventListener('click',(event)=>{if(!state.reviewMode)return;const node=event.target instanceof HTMLElement?event.target:null;if(!node)return;if(node.closest('#pi-plan-review-root'))return;if(node.closest('.pi-inline-composer')||node.closest('.pi-global-composer'))return;const block=node.closest('[data-review-id]');if(!block)return;state.lastClick={x:event.clientX,y:event.clientY};event.preventDefault();event.stopPropagation();clearHover();openComposer(block);},true);
 state.blocks=gatherReviewBlocks();
 renderAnnotations();
 updateBadges();
 syncReviewMeta();
-showStatus('Click any review block to comment inline. Sidebar shows the comment list.','info');
+syncReviewMeta();
 })();`;
 }
 
@@ -168,43 +168,46 @@ function injectReviewClient(html: string, config: { sourcePath: string }): strin
 body{padding-right:min(28vw,400px)!important;padding-bottom:0!important;box-sizing:border-box;}
 #pi-plan-review-root *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 #pi-plan-review-root{position:fixed;top:0;right:0;bottom:0;width:min(28vw,400px);min-width:340px;z-index:2147483647;color:#ecf2f8}
-#pi-plan-review-panel{height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#162132,#0f172a);border-left:1px solid rgba(103,210,231,.14)}
-#pi-plan-review-header{padding:16px;border-bottom:1px solid rgba(103,210,231,.10)}
-#pi-plan-review-header h1{margin:6px 0 4px;font-size:22px;line-height:1.2;font-weight:650;color:#e6edf5}
-#pi-plan-review-header p{margin:0;color:#8ea0b8;font-size:11px;line-height:1.45;word-break:break-word}
-#pi-plan-review-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid rgba(103,210,231,.10)}
-#pi-plan-review-root button{border:1px solid rgba(148,163,184,.24);background:rgba(255,255,255,.04);color:#d7e0ea;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer}
+#pi-plan-review-panel{height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#162132,#0f172a);border-left:1px solid rgba(103,210,231,.14);min-height:0}
+#pi-plan-review-header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(103,210,231,.10);flex-shrink:0}
+.pi-review-filename{flex:1;min-width:0;color:#e6edf5;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pi-plan-review-comments{flex:1;min-height:0;overflow:auto;padding:8px 14px}
+#pi-plan-review-footer{flex-shrink:0;display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px;border-top:1px solid rgba(103,210,231,.14);background:rgba(9,14,24,.45);box-shadow:0 -8px 24px rgba(2,8,23,.35)}
+.pi-review-footer-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+#pi-plan-review-root button{border:1px solid rgba(148,163,184,.24);background:rgba(255,255,255,.04);color:#d7e0ea;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease}
 #pi-plan-review-root button:hover{border-color:rgba(103,210,231,.45);color:#ecf2f8}
+#pi-plan-review-root button:disabled{opacity:.45;cursor:not-allowed}
 #pi-plan-review-root button[data-kind="primary"]{background:#0f766e;border-color:#0f766e;color:#fff}
 #pi-plan-review-root button[data-kind="primary"]:hover{background:#115e59;border-color:#115e59}
-#pi-plan-review-root button[data-kind="danger"]{color:#fda4af}
-#pi-plan-review-root button[data-active="true"]{border-color:#67d2e7;color:#67d2e7}
-#pi-plan-review-body{display:flex;flex-direction:column;gap:16px;overflow:auto;padding:16px}
-#pi-plan-review-status{display:none;padding:9px 10px;border-radius:10px;font-size:12px;line-height:1.4}
+#pi-plan-review-root button.pi-review-ghost{border:none!important;background:none!important;color:#8ea0b8;padding:6px 8px!important;font-size:11px!important;font-weight:600!important}
+#pi-plan-review-root button.pi-review-ghost:hover{color:#67d2e7;background:rgba(103,210,231,.06)!important}
+#pi-plan-review-status{display:none;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.4}
 #pi-plan-review-status[data-visible="true"]{display:block}
 #pi-plan-review-status[data-kind="info"]{background:rgba(103,210,231,.08);color:#8ea0b8}
 #pi-plan-review-status[data-kind="success"]{background:rgba(15,118,110,.18);color:#5eead4}
 #pi-plan-review-status[data-kind="error"]{background:rgba(190,18,60,.18);color:#fda4af}
-.pi-review-kicker{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#67d2e7}
-.pi-review-section{display:grid;gap:8px}
-.pi-review-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8ea0b8}
-.pi-review-textarea{width:100%;min-height:140px;padding:12px 13px;border:1px solid rgba(103,210,231,.32);border-radius:12px;background:rgba(9,14,24,.72);color:#ecf2f8;font-size:13px;line-height:1.5;resize:vertical}
+.pi-review-label{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#8ea0b8;margin-bottom:-2px}
+.pi-review-textarea{width:100%;min-height:64px;padding:10px 12px;border:1px solid rgba(103,210,231,.22);border-radius:10px;background:rgba(9,14,24,.72);color:#ecf2f8;font-size:13px;line-height:1.5;resize:vertical;transition:border-color .15s ease,box-shadow .15s ease,min-height .15s ease}
 .pi-review-textarea::placeholder{color:#64748b}
-.pi-review-textarea:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 3px rgba(103,210,231,.14)}
-.pi-review-summary{min-height:140px}
-.pi-review-empty{padding:10px 0;color:#64748b;font-size:13px}
-.pi-review-annotations{display:flex;flex-direction:column;gap:8px}
-.pi-review-annotation-item{padding:10px 0;border-top:1px solid rgba(103,210,231,.10)}
-.pi-review-annotation-item:first-child{padding-top:0;border-top:none}
-.pi-review-annotation-item header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:4px}
-.pi-review-annotation-item p{margin:0;font-size:12px;line-height:1.5;color:#d7e0ea;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.pi-review-link,.pi-review-remove,.pi-review-edit{padding:0!important;border:none!important;background:none!important;border-radius:0!important;font-size:11px!important}
-.pi-review-link{color:#67d2e7!important;text-align:left;font-weight:600!important}
-.pi-review-remove{color:#fda4af!important}
+.pi-review-textarea:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 3px rgba(103,210,231,.14);min-height:120px}
+.pi-review-summary{min-height:64px}
+.pi-review-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px 16px;color:#64748b;font-size:13px;text-align:center;line-height:1.5}
+.pi-review-empty-icon{width:32px;height:32px;border-radius:999px;border:1px dashed rgba(103,210,231,.28);display:flex;align-items:center;justify-content:center;color:#67d2e7;font-size:18px;line-height:1}
+.pi-review-annotations{display:flex;flex-direction:column;gap:8px;padding:8px 0}
+.pi-comment-card{position:relative;padding:10px 12px 10px 14px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid rgba(103,210,231,.08);border-left:3px solid #67d2e7;transition:background .15s ease,border-color .15s ease}
+.pi-comment-card:hover{background:rgba(255,255,255,.05);border-color:rgba(103,210,231,.22)}
+.pi-comment-anchor{display:block;width:100%;text-align:left;padding:0!important;border:none!important;background:none!important;color:#67d2e7!important;font-size:11px!important;font-weight:600!important;letter-spacing:.02em;margin-bottom:4px}
+.pi-comment-anchor:hover{color:#a5e8f3!important;background:none!important;border:none!important}
+.pi-comment-body{margin:0;font-size:13px;line-height:1.5;color:#d7e0ea;word-break:break-word}
+.pi-comment-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:6px;opacity:0;transition:opacity .15s ease;pointer-events:none}
+.pi-comment-card:hover .pi-comment-actions,.pi-comment-card:focus-within .pi-comment-actions,.pi-comment-card[data-recent="true"] .pi-comment-actions{opacity:1;pointer-events:auto}
+.pi-review-edit,.pi-review-remove{padding:4px 8px!important;border-radius:6px!important;font-size:11px!important;font-weight:600!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(148,163,184,.18)!important}
 .pi-review-edit{color:#8ea0b8!important}
-.pi-review-item-actions{display:flex;gap:8px;align-items:center}
+.pi-review-edit:hover{color:#ecf2f8!important;border-color:rgba(103,210,231,.35)!important}
+.pi-review-remove{color:#fda4af!important}
+.pi-review-remove:hover{color:#fff!important;background:rgba(190,18,60,.25)!important;border-color:rgba(253,164,175,.45)!important}
 [data-review-id]{scroll-margin-top:32px;position:relative}
-.pi-review-hover{outline:2px dashed rgba(180,83,9,.75)!important;outline-offset:4px!important}
+.pi-review-hover{outline:1px dashed rgba(103,210,231,.55)!important;outline-offset:4px!important}
 .pi-review-selected{outline:2px solid rgba(15,118,110,.85)!important;outline-offset:4px!important}
 .pi-review-badge{position:absolute;top:10px;right:10px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#0f766e;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(15,118,110,.22)}
 .pi-inline-composer{position:fixed;z-index:2147483000;width:320px;max-width:calc(100vw - 24px)}
@@ -221,10 +224,19 @@ body{padding-right:min(28vw,400px)!important;padding-bottom:0!important;box-sizi
 .pi-inline-textarea::placeholder{color:#8ea0b8}
 .pi-inline-textarea:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 3px rgba(103,210,231,.14)}
 .pi-inline-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
-.pi-inline-composer .pi-inline-save{background:#0f766e!important;border-color:#0f766e!important;color:#fff!important}
-.pi-inline-composer .pi-inline-cancel{background:rgba(255,255,255,.04)!important;border-color:rgba(148,163,184,.24)!important;color:#d7e0ea!important}
-.pi-inline-hint{margin-top:8px;font-size:11px;color:#8ea0b8}
-@media (max-width: 960px){body{padding-right:0!important;padding-bottom:40vh!important}#pi-plan-review-root{left:0;right:0;top:auto;width:100vw;min-width:0;height:40vh}.pi-inline-composer{left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}.pi-inline-composer::before{display:none}.pi-global-composer{left:12px;right:12px;bottom:12px;width:auto}}
+.pi-inline-composer .pi-inline-save,.pi-global-composer .pi-inline-save{background:#0f766e!important;border-color:#0f766e!important;color:#fff!important;border-radius:10px!important;padding:8px 14px!important;font-weight:600!important}
+.pi-inline-composer .pi-inline-save:hover,.pi-global-composer .pi-inline-save:hover{background:#115e59!important;border-color:#115e59!important}
+.pi-inline-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:10px}
+.pi-inline-hint{font-size:11px;color:#8ea0b8}
+#pi-submitted-overlay{position:fixed;inset:0;z-index:2147483646;background:rgba(11,18,32,.92);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#ecf2f8}
+.pi-submitted-card{max-width:420px;width:100%;text-align:center;padding:32px 28px;border-radius:20px;border:1px solid rgba(103,210,231,.24);background:linear-gradient(180deg,#162132,#0f172a);box-shadow:0 32px 80px rgba(2,8,23,.55)}
+.pi-submitted-check{width:56px;height:56px;border-radius:999px;background:rgba(15,118,110,.18);color:#5eead4;font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;border:1px solid rgba(94,234,212,.32)}
+.pi-submitted-card h2{margin:0 0 6px;font-size:22px;font-weight:650;letter-spacing:-.01em}
+.pi-submitted-card p{margin:0 0 4px;color:#8ea0b8;font-size:13px;line-height:1.5}
+.pi-submitted-hint{font-size:12px!important;color:#64748b!important;margin-top:8px!important}
+#pi-submitted-close{margin-top:18px;padding:9px 18px;border-radius:10px;border:1px solid #0f766e;background:#0f766e;color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+#pi-submitted-close:hover{background:#115e59;border-color:#115e59}
+@media (max-width: 960px){body{padding-right:0!important;padding-bottom:48vh!important}#pi-plan-review-root{left:0;right:0;top:auto;width:100vw;min-width:0;height:48vh}#pi-plan-review-footer{padding:10px 12px 12px}.pi-inline-composer{left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}.pi-inline-composer::before{display:none}.pi-global-composer{left:12px;right:12px;bottom:12px;width:auto}}
 </style>
 <div id="pi-plan-review-root">${sidebarMarkup}</div>
 <script>${script}</script>`;
@@ -309,6 +321,7 @@ export default function (pi: ExtensionAPI) {
 
 					res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
 					res.end(JSON.stringify({ ok: true, annotationCount: Array.isArray(payload.annotations) ? payload.annotations.length : 0, jsonPath, markdownPath }));
+					setTimeout(() => { closeServer().catch(() => {}); }, 750);
 					return;
 				}
 

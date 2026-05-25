@@ -23,7 +23,9 @@ Steps to run by default:
    3. If multiple candidates exist, pick the **most recent** plan-like message.
    4. If absolutely no plan-like content is found in the current conversation, ask the user to paste it or give a path. Do not invent a plan.
 
-2. Generate the HTML following the structure and rules below.
+2. Decide the generation mode (see "Modes" below).
+
+3. Generate the HTML following the structure and rules for that mode.
 
 3. Save the file using the rules in the "File output" section.
 
@@ -80,9 +82,40 @@ The HTML must be standalone and self-contained.
 </html>
 ```
 
-## Required review blocks
+## Modes
 
-Always emit these top-level blocks **in this order**, even if a section is short. Use the exact `data-review-id` values below so feedback stays mappable across revisions:
+Two modes are supported:
+
+- **full** (default) — emits all required review blocks in order, uses full inline CSS, and is stable across revisions. Best for review → revise loops.
+- **lite** — emits only the sections that actually exist in the input plan, skips structural stubs, uses minimal inline styling. Fastest to generate. Best for one-off reviews.
+
+### How to pick the mode
+
+Pick **lite** if any of these are true:
+
+- the user passes `lite`, `--lite`, `mode=lite`, or similar as an argument to the skill invocation
+- the user uses words like "quick", "fast", "lite", "light", "minimal", or "don't worry about formatting" in the same or immediately prior message
+- the plan is very short (under ~30 lines of meaningful content) and the user did not explicitly ask for full
+
+Otherwise pick **full**.
+
+When unsure, prefer **full** for the first generation of a plan, and **lite** for re-runs in the same conversation.
+
+### Lite mode rules
+
+- Only emit top-level blocks that have real content from the input. Do not emit stubs.
+- Still use stable `data-review-id` values from the required list below for any section you do emit.
+- Sub-block ids still follow the parent-prefixed slug rule.
+- Use a smaller base stylesheet (see "Style (lite)" below).
+- Do not include sequencing, risks, or open-questions stubs unless the plan actually addresses them.
+- Keep markup tight: no decorative wrappers, no unused classes.
+- Skip any commentary or explanation HTML — just blocks.
+
+Lite mode trades revision stability for speed. That's the intentional tradeoff.
+
+## Required review blocks (full mode)
+
+In **full** mode, always emit these top-level blocks **in this order**, even if a section is short. In **lite** mode, only emit the ones with real content, but still use these exact `data-review-id` values when you do emit them so feedback stays mappable:
 
 | `data-review-id`       | Title              | Purpose                                  |
 |------------------------|--------------------|------------------------------------------|
@@ -96,7 +129,9 @@ Always emit these top-level blocks **in this order**, even if a section is short
 | `sequencing`           | Sequencing         | phases, ordering, rollout                 |
 | `open-questions`       | Open questions     | unknowns and decisions to resolve         |
 
-If the input plan has no content for a section, still emit the block with a short note like `<p>None.</p>` so block ids remain stable across revisions.
+In **full** mode, if the input plan has no content for a section, still emit the block with a short note like `<p>None.</p>` so block ids remain stable across revisions.
+
+In **lite** mode, omit that section entirely.
 
 ## Inner block rules
 
@@ -110,7 +145,7 @@ If the input plan has no content for a section, still emit the block with a shor
 - Sub-block ids must be slug-style: lowercase, hyphenated, stable
 - Never auto-number ids in a way that shifts when content is added (avoid `card-12`, prefer semantic names)
 
-## Style
+## Style (full)
 
 Inline minimal CSS, dark-friendly, no external assets. Keep it readable but plain — the review viewer is the primary surface.
 
@@ -142,6 +177,23 @@ p, li { color: var(--muted); }
 code { background: rgba(103,210,231,.08); color: var(--text); padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
 ul { padding-left: 18px; margin: 8px 0 0; }
 ```
+
+## Style (lite)
+
+Lite mode should use a tiny base stylesheet so the model has less to emit:
+
+```css
+:root { color-scheme: dark; }
+body { margin: 0; background: #0b1220; color: #e6edf5; font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.5; }
+main.plan { max-width: 900px; margin: 0 auto; padding: 24px; display: grid; gap: 12px; }
+section[data-review-id], article[data-review-id] { background: #111a2e; border: 1px solid rgba(148,163,184,.24); border-radius: 12px; padding: 14px 16px; }
+h2 { margin: 0 0 8px; font-size: 1.15rem; }
+h3 { margin: 0 0 6px; font-size: 1rem; }
+p, li { color: #b6c2d2; margin: 4px 0; }
+ul { padding-left: 18px; margin: 6px 0 0; }
+```
+
+Do not add anything else in lite mode.
 
 ## File output
 
