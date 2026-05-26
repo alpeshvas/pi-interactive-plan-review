@@ -227,7 +227,7 @@ function buildInjectedScript() {
 	return String.raw`(()=>{
 const root=document.getElementById('pi-plan-review-root');
 if(!root)return;
-const state={reviewMode:true,selected:null,hovered:null,annotations:[],blocks:[],composer:null,editingId:null,composerAnchor:null,composerMode:null,composerConversation:null,lastClick:null,statusTimer:null,recentId:null,recentTimer:null,pendingSnippet:null,pendingMarkId:null,pendingAnnotationId:null,selectionPopover:null};
+const state={reviewMode:true,selected:null,hovered:null,annotations:[],blocks:[],composer:null,editingId:null,composerAnchor:null,composerMode:null,composerConversation:null,lastClick:null,statusTimer:null,recentId:null,recentTimer:null,pendingSnippet:null,pendingMarkId:null,pendingAnnotationId:null,selectionPopover:null,selectionTimer:null};
 const statusEl=document.getElementById('pi-plan-review-status');
 const summaryEl=document.getElementById('pi-review-summary');
 const annotationsEl=document.getElementById('pi-review-annotations');
@@ -270,10 +270,11 @@ function getActiveSelectionInfo(){const sel=window.getSelection&&window.getSelec
 function hideSelectionPopover(){if(state.selectionPopover){state.selectionPopover.remove();state.selectionPopover=null;}}
 function showSelectionPopover(info){hideSelectionPopover();const rect=info.range.getBoundingClientRect();if(!rect||(rect.width===0&&rect.height===0))return;const el=document.createElement('button');el.type='button';el.className='pi-selection-popover';el.textContent='💬 Comment on selection';el.style.top=Math.min(window.innerHeight-44,rect.bottom+8)+'px';el.style.left=Math.max(12,Math.min(window.innerWidth-260,rect.left))+'px';el.addEventListener('mousedown',(e)=>e.preventDefault());el.addEventListener('click',(e)=>{e.preventDefault();e.stopPropagation();commentOnSelection(info);hideSelectionPopover();});document.body.appendChild(el);state.selectionPopover=el;}
 function commentOnSelection(info){try{window.getSelection().removeAllRanges();}catch(e){}state.pendingSnippet=info.text.slice(0,240);state.pendingMarkId=null;state.pendingAnnotationId=crypto.randomUUID();openComposer(info.block,null,{title:info.block.dataset.reviewTitle||info.block.dataset.reviewId||'Selection',snippet:info.text});}
-function refreshSelectionPopover(){const info=getActiveSelectionInfo();if(!info){hideSelectionPopover();return;}showSelectionPopover(info);}
-document.addEventListener('mouseup',()=>setTimeout(refreshSelectionPopover,0));
+function refreshSelectionPopover(){const info=getActiveSelectionInfo();if(!info){hideSelectionPopover();return;}hideSelectionPopover();commentOnSelection(info);}
+function scheduleSelectionComment(){if(state.selectionTimer){clearTimeout(state.selectionTimer);}state.selectionTimer=setTimeout(()=>{state.selectionTimer=null;refreshSelectionPopover();},180);}
+document.addEventListener('mouseup',scheduleSelectionComment);
 document.addEventListener('keyup',(event)=>{if(event.shiftKey||event.key==='ArrowLeft'||event.key==='ArrowRight'||event.key==='ArrowUp'||event.key==='ArrowDown')refreshSelectionPopover();});
-document.addEventListener('mousedown',(event)=>{const t=event.target;if(t instanceof HTMLElement&&t.closest('.pi-selection-popover'))return;hideSelectionPopover();});
+document.addEventListener('mousedown',()=>{if(state.selectionTimer){clearTimeout(state.selectionTimer);state.selectionTimer=null;}hideSelectionPopover();});
 document.addEventListener('mouseover',(event)=>{if(!state.reviewMode)return;const t=event.target instanceof HTMLElement?event.target:null;if(!t)return;if(t.closest('.pr-toc')||t.closest('a,button,summary,label,input,textarea,select,[data-no-review]')){clearHover();return;}const el=t.closest('[data-review-id]');if(!el||el.closest('#pi-plan-review-root'))return;clearHover();state.hovered=el;el.classList.add('pi-review-hover');},true);
 document.addEventListener('click',(event)=>{if(!state.reviewMode)return;const node=event.target instanceof HTMLElement?event.target:null;if(!node)return;if(node.closest('#pi-plan-review-root'))return;if(node.closest('.pi-inline-composer')||node.closest('.pi-global-composer')||node.closest('.pi-selection-popover'))return;if(node.closest('a,button,summary,label,input,textarea,select,[data-no-review]'))return;if(node.closest('.pr-toc'))return;const sel=window.getSelection&&window.getSelection();if(sel&&!sel.isCollapsed&&sel.toString().trim().length>0)return;const block=node.closest('[data-review-id]');if(!block)return;state.lastClick={x:event.clientX,y:event.clientY};event.preventDefault();event.stopPropagation();clearHover();openComposer(block);},true);
 state.blocks=gatherReviewBlocks();
