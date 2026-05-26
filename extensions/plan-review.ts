@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { complete } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
@@ -43,6 +44,14 @@ function buildReviewSummary(payload: any, jsonPath: string, markdownPath: string
 		const target = annotation.targetTitle || annotation.targetId || annotation.selector || "general";
 		const snippet = annotation.textSnippet ? ` | snippet: ${annotation.textSnippet}` : "";
 		lines.push(`${index + 1}. [${target}] ${annotation.comment ?? ""}${snippet}`);
+		const conversation = Array.isArray(annotation.conversation) ? annotation.conversation : [];
+		if (conversation.length > 0) {
+			lines.push("   Inline Q&A:");
+			for (const turn of conversation) {
+				const role = turn?.role === "assistant" ? "Pi" : "Reviewer";
+				lines.push(`   - ${role}: ${turn?.text || ""}`);
+			}
+		}
 	}
 
 	return lines.join("\n");
@@ -79,10 +88,115 @@ function toMarkdown(payload: any, jsonPath: string): string {
 		if (annotation.selector) lines.push(`- Selector: \`${annotation.selector}\``);
 		if (annotation.textSnippet) lines.push(`- Snippet: ${annotation.textSnippet}`);
 		if (annotation.createdAt) lines.push(`- Captured at: ${annotation.createdAt}`);
+		const conversation = Array.isArray(annotation.conversation) ? annotation.conversation : [];
+		if (conversation.length > 0) {
+			lines.push("");
+			lines.push("#### Inline Q&A");
+			lines.push("");
+			for (const turn of conversation) {
+				const role = turn?.role === "assistant" ? "Pi" : "Reviewer";
+				lines.push(`**${role}:** ${turn?.text || ""}`);
+				lines.push("");
+			}
+		}
 		lines.push("");
 	}
 
 	return lines.join("\n");
+}
+
+function stripHtml(html: string): string {
+	return html
+		.replaceAll(/<script[\s\S]*?<\/script>/gi, " ")
+		.replaceAll(/<style[\s\S]*?<\/style>/gi, " ")
+		.replaceAll(/<[^>]+>/g, " ")
+		.replaceAll(/&nbsp;/g, " ")
+		.replaceAll(/&amp;/g, "&")
+		.replaceAll(/&lt;/g, "<")
+		.replaceAll(/&gt;/g, ">")
+		.replaceAll(/\s+/g, " ")
+		.trim();
+}
+
+function truncateText(value: string, max = 12000): string {
+	if (!value || value.length <= max) return value || "";
+	return `${value.slice(0, Math.floor(max * 0.65))}\n\n…[truncated]…\n\n${value.slice(-Math.floor(max * 0.35))}`;
+}
+
+function extractMessageText(message: any): string {
+	if (!message?.content) return "";
+	if (typeof message.content === "string") return message.content;
+	if (!Array.isArray(message.content)) return "";
+	return message.content
+		.filter((part: any) => part?.type === "text" && typeof part.text === "string")
+		.map((part: any) => part.text)
+		.join("\n");
+}
+
+function recentSessionContext(ctx: any): string {
+	try {
+		const branch = ctx.sessionManager.getBranch();
+		const lines: string[] = [];
+		for (const entry of branch.slice(-18)) {
+			if (entry?.type !== "message") continue;
+			const message = entry.message;
+			if (!message || !["user", "assistant"].includes(message.role)) continue;
+			const text = extractMessageText(message).trim();
+			if (!text) continue;
+			lines.push(`${message.role.toUpperCase()}: ${truncateText(text, 1800)}`);
+		}
+		return truncateText(lines.join("\n\n"), 12000);
+	} catch {
+		return "";
+	}
+}
+
+async function answerReviewQuestion(ctx: any, sourceHtml: string, payload: any): Promise<string> {
+	if (!ctx.model) throw new Error("No model selected in Pi");
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+	if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
+
+	const question = String(payload?.question || "").trim();
+	if (!question) throw new Error("Question is required");
+
+	const conversation = Array.isArray(payload?.conversation) ? payload.conversation : [];
+	const annotations = Array.isArray(payload?.annotations) ? payload.annotations : [];
+	const userText = [
+		"Current Pi session context:",
+		recentSessionContext(ctx) || "(none)",
+		"",
+		"HTML plan text:",
+		truncateText(stripHtml(sourceHtml), 10000),
+		"",
+		"Selected review block:",
+		`Title: ${payload?.targetTitle || payload?.targetId || "General comment"}`,
+		`Snippet: ${payload?.textSnippet || "(none)"}`,
+		`Reviewer comment: ${payload?.comment || "(none)"}`,
+		"",
+		"Existing inline Q&A for this comment:",
+		conversation.map((turn: any) => `${turn?.role === "assistant" ? "Pi" : "Reviewer"}: ${turn?.text || ""}`).join("\n") || "(none)",
+		"",
+		"Other review annotations:",
+		annotations.map((annotation: any, index: number) => `${index + 1}. [${annotation?.targetTitle || annotation?.targetId || "General"}] ${annotation?.comment || ""}`).join("\n") || "(none)",
+		"",
+		"Reviewer question:",
+		question,
+	].join("\n");
+
+	const response = await complete(
+		ctx.model,
+		{
+			systemPrompt: "You are Pi helping with an interactive HTML plan review. Answer the reviewer's question briefly and concretely using the current Pi session context, selected block, and existing comments. Do not modify files. If the context is insufficient, say what is missing. Keep the answer under 120 words unless the user asks for more.",
+			messages: [{ role: "user", content: [{ type: "text", text: userText }], timestamp: Date.now() }],
+		},
+		{ apiKey: auth.apiKey, headers: auth.headers, signal: ctx.signal },
+	);
+
+	return response.content
+		.filter((part: any) => part?.type === "text" && typeof part.text === "string")
+		.map((part: any) => part.text)
+		.join("\n")
+		.trim() || "I couldn't produce an answer.";
 }
 
 function buildSidebarMarkup(sourcePath: string) {
@@ -137,11 +251,13 @@ function commentCountForBlock(block){return state.annotations.filter((annotation
 function syncReviewMeta(){const count=state.annotations.length;if(submitButton){submitButton.textContent=count>0?('Submit '+count+' '+(count===1?'comment':'comments')):'Submit';submitButton.disabled=count===0&&!summaryEl.value.trim();}if(discardButton){discardButton.hidden=count===0;}}
 function updateBadges(){state.blocks.forEach((block)=>{let badge=block.querySelector(':scope > .pi-review-badge');const count=commentCountForBlock(block);if(count===0){badge?.remove();return;}if(!badge){badge=document.createElement('div');badge.className='pi-review-badge';block.appendChild(badge);}badge.textContent=String(count);});syncReviewMeta();}
 function buildComposerMarkup(title,existingComment,snippet){const snippetHtml=snippet?'<blockquote class="pi-inline-snippet">'+escapeHtml(snippet.length>240?snippet.slice(0,240)+'…':snippet)+'</blockquote>':'';return '<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>'+escapeHtml(title)+'</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div>'+snippetHtml+'<textarea class="pi-inline-textarea" placeholder="What should change in this part of the plan?">'+escapeHtml(existingComment||'')+'</textarea><div class="pi-inline-actions"><div class="pi-inline-hint">⌘↵ save · Esc cancel</div><button type="button" class="pi-inline-save">Save</button></div></div>';}
-function upsertAnnotation(block,comment){const existingIndex=state.editingId?state.annotations.findIndex((annotation)=>annotation.id===state.editingId):-1;const useSnippet=state.pendingSnippet||(existingIndex>=0?state.annotations[existingIndex].textSnippet:null)||(block?textPreview(block):null);const useMarkId=state.pendingMarkId||(existingIndex>=0?state.annotations[existingIndex].markId:null)||null;const useId=state.pendingAnnotationId||(existingIndex>=0?state.annotations[existingIndex].id:crypto.randomUUID());const payload={id:useId,targetId:block?.dataset?.reviewId||null,targetTitle:block?.dataset?.reviewTitle||'General comment',selector:block?reviewSelector(block):null,textSnippet:useSnippet,markId:useMarkId,comment,createdAt:new Date().toISOString()};state.pendingSnippet=null;state.pendingMarkId=null;state.pendingAnnotationId=null;if(existingIndex>=0){state.annotations.splice(existingIndex,1,payload);}else{state.annotations.push(payload);}state.recentId=payload.id;if(state.recentTimer){clearTimeout(state.recentTimer);}state.recentTimer=setTimeout(()=>{state.recentId=null;renderAnnotations();},4000);renderAnnotations();updateBadges();}
+function upsertAnnotation(block,comment){const existingIndex=state.editingId?state.annotations.findIndex((annotation)=>annotation.id===state.editingId):-1;const useSnippet=state.pendingSnippet||(existingIndex>=0?state.annotations[existingIndex].textSnippet:null)||(block?textPreview(block):null);const useMarkId=state.pendingMarkId||(existingIndex>=0?state.annotations[existingIndex].markId:null)||null;const useId=state.pendingAnnotationId||(existingIndex>=0?state.annotations[existingIndex].id:crypto.randomUUID());const existingConversation=existingIndex>=0&&Array.isArray(state.annotations[existingIndex].conversation)?state.annotations[existingIndex].conversation:[];const payload={id:useId,targetId:block?.dataset?.reviewId||null,targetTitle:block?.dataset?.reviewTitle||'General comment',selector:block?reviewSelector(block):null,textSnippet:useSnippet,markId:useMarkId,comment,conversation:existingConversation,createdAt:new Date().toISOString()};state.pendingSnippet=null;state.pendingMarkId=null;state.pendingAnnotationId=null;if(existingIndex>=0){state.annotations.splice(existingIndex,1,payload);}else{state.annotations.push(payload);}state.recentId=payload.id;if(state.recentTimer){clearTimeout(state.recentTimer);}state.recentTimer=setTimeout(()=>{state.recentId=null;renderAnnotations();},4000);renderAnnotations();updateBadges();}
 function positionComposer(){if(!state.composer||!state.composerAnchor||state.composerMode!=='block')return;const pop=state.composer;const rect=state.composerAnchor.getBoundingClientRect();const viewportWidth=window.innerWidth;const viewportHeight=window.innerHeight;const reviewPanel=document.getElementById('pi-plan-review-root');const panelRect=reviewPanel?.getBoundingClientRect();const contentRight=panelRect?Math.max(12,panelRect.left-COMPOSER_GAP):viewportWidth-12;const contentWidth=Math.max(280,contentRight-24);const panelWidth=Math.min(Math.max(COMPOSER_WIDTH,280),Math.min(360,contentWidth));pop.style.width=panelWidth+'px';pop.style.maxWidth='calc(100vw - 24px)';const popRect=pop.getBoundingClientRect();const width=popRect.width||panelWidth;const height=popRect.height||260;const rightSpace=Math.max(0,contentRight-rect.right-COMPOSER_GAP);const leftSpace=Math.max(0,rect.left-COMPOSER_GAP-12);const belowSpace=Math.max(0,viewportHeight-rect.bottom-COMPOSER_GAP-12);const aboveSpace=Math.max(0,rect.top-COMPOSER_GAP-12);let placement='bottom';if(belowSpace>=height){placement='bottom';}else if(aboveSpace>=height){placement='top';}else if(leftSpace>=width){placement='left';}else if(rightSpace>=width){placement='right';}else{const spaces=[['bottom',belowSpace],['top',aboveSpace],['left',leftSpace],['right',rightSpace]].sort((a,b)=>b[1]-a[1]);placement=spaces[0][0];}const clickX=state.lastClick?.x ?? (rect.left + rect.width / 2);let top=rect.bottom+COMPOSER_GAP;let left=clickX-(width/2);if(placement==='top'){top=rect.top-height-COMPOSER_GAP;left=clickX-(width/2);}else if(placement==='left'){left=rect.left-width-COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}else if(placement==='right'){left=rect.right+COMPOSER_GAP;top=Math.min(Math.max(12,rect.top),viewportHeight-height-12);}left=Math.min(Math.max(12,left),Math.max(12,contentRight-width));top=Math.min(Math.max(12,top),viewportHeight-height-12);pop.style.left=left+'px';pop.style.top=top+'px';pop.dataset.placement=placement;}
 function openComposer(block,annotation,opts){if(!block)return;clearSelected();closeComposer();state.selected=block;block.classList.add('pi-review-selected');const wrapper=document.createElement('div');wrapper.className='pi-inline-composer';const composerTitle=(opts&&opts.title)||block.dataset.reviewTitle||block.dataset.reviewId||'Block';const composerSnippet=(opts&&opts.snippet)||annotation?.textSnippet||state.pendingSnippet||null;wrapper.innerHTML=buildComposerMarkup(composerTitle,annotation?.comment||'',composerSnippet);document.body.appendChild(wrapper);state.composer=wrapper;state.composerAnchor=block;state.composerMode='block';state.editingId=annotation?.id||null;const textarea=wrapper.querySelector('.pi-inline-textarea');const cancelPendingMark=()=>{if(state.pendingMarkId&&!annotation){const mark=document.querySelector('mark.pi-review-mark[data-annotation-id="'+CSS.escape(state.pendingMarkId)+'"]');if(mark){const parent=mark.parentNode;while(mark.firstChild)parent.insertBefore(mark.firstChild,mark);parent.removeChild(mark);parent.normalize&&parent.normalize();}}state.pendingSnippet=null;state.pendingMarkId=null;state.pendingAnnotationId=null;};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}upsertAnnotation(block,comment);closeComposer();clearStatus();showStatus('Comment saved.','success');clearSelected();};wrapper.querySelector('.pi-inline-save')?.addEventListener('click',save);wrapper.querySelector('.pi-inline-close')?.addEventListener('click',()=>{cancelPendingMark();closeComposer();clearSelected();});textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();cancelPendingMark();closeComposer();clearSelected();}});positionComposer();window.addEventListener('resize',positionComposer);window.addEventListener('scroll',positionComposer,true);textarea.focus();textarea.setSelectionRange(textarea.value.length,textarea.value.length);}
-function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty"><div class="pi-review-empty-icon">·</div><div>Click any block in the plan to leave a note.</div></div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{const item=document.createElement('article');item.className='pi-comment-card';if(annotation.id===state.recentId){item.dataset.recent='true';}const snippetHtml=annotation.markId&&annotation.textSnippet?'<div class="pi-comment-snippet">“'+escapeHtml(annotation.textSnippet.slice(0,140))+(annotation.textSnippet.length>140?'…':'')+'”</div>':'';item.innerHTML='<button type="button" class="pi-comment-anchor">→ '+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+(annotation.markId?' · selection':'')+'</button>'+snippetHtml+'<p class="pi-comment-body">'+escapeHtml(annotation.comment)+'</p><div class="pi-comment-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" class="pi-review-remove">Remove</button></div>';const focusBlock=()=>{if(annotation.markId){const mark=document.querySelector('mark.pi-review-mark[data-annotation-id="'+CSS.escape(annotation.markId)+'"]');if(mark){mark.scrollIntoView({behavior:'smooth',block:'center'});mark.classList.add('pi-review-mark-pulse');setTimeout(()=>mark.classList.remove('pi-review-mark-pulse'),1200);state.pendingAnnotationId=annotation.id;state.pendingMarkId=annotation.markId;state.pendingSnippet=annotation.textSnippet;const block=mark.closest('[data-review-id]')||state.blocks[0];openComposer(block,annotation,{title:'Edit comment on selection'});return;}}if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}};item.querySelector('.pi-comment-anchor')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-edit')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{if(annotation.markId){const mark=document.querySelector('mark.pi-review-mark[data-annotation-id="'+CSS.escape(annotation.markId)+'"]');if(mark){const parent=mark.parentNode;while(mark.firstChild)parent.insertBefore(mark.firstChild,mark);parent.removeChild(mark);parent.normalize&&parent.normalize();}}state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});annotationsEl.appendChild(item);});}
-function addGeneralComment(){const existing={id:crypto.randomUUID(),targetId:null,targetTitle:'General comment',comment:'',textSnippet:null};closeComposer();clearSelected();const drawer=document.createElement('div');drawer.className='pi-global-composer';drawer.innerHTML='<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>General comment</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="General feedback about the plan"></textarea><div class="pi-inline-actions"><div class="pi-inline-hint">⌘↵ save · Esc cancel</div><button type="button" class="pi-inline-save">Save</button></div></div>';document.body.appendChild(drawer);state.composer=drawer;state.composerMode='general';state.editingId=existing.id;const textarea=drawer.querySelector('.pi-inline-textarea');const close=()=>{closeComposer();};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}state.annotations.push({...existing,comment,createdAt:new Date().toISOString()});renderAnnotations();close();clearStatus();showStatus('General comment saved.','success');};drawer.querySelector('.pi-inline-save')?.addEventListener('click',save);drawer.querySelector('.pi-inline-close')?.addEventListener('click',close);textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();close();}});textarea.focus();}
+async function askPi(annotation,question,askButton){question=(question||'').trim();if(!question){showStatus('Write a question first.','error');return;}annotation.conversation=Array.isArray(annotation.conversation)?annotation.conversation:[];annotation.conversation.push({role:'user',text:question,createdAt:new Date().toISOString()});renderAnnotations();showStatus('Asking Pi...','info');try{const response=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question,targetId:annotation.targetId,targetTitle:annotation.targetTitle,textSnippet:annotation.textSnippet,comment:annotation.comment,conversation:annotation.conversation,annotations:state.annotations})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Pi could not answer');annotation.conversation.push({role:'assistant',text:result.answer||'',createdAt:new Date().toISOString()});renderAnnotations();showStatus('Pi answered.','success');}catch(error){annotation.conversation.push({role:'assistant',text:'Could not answer: '+(error?.message||error),createdAt:new Date().toISOString(),isError:true});renderAnnotations();showStatus(error?.message||'Pi could not answer','error');}}
+function renderThread(annotation){const conversation=Array.isArray(annotation.conversation)?annotation.conversation:[];const wrap=document.createElement('div');wrap.className='pi-qa-thread';conversation.forEach((turn)=>{const bubble=document.createElement('div');bubble.className='pi-qa-bubble '+(turn.role==='assistant'?'pi-qa-assistant':'pi-qa-user');if(turn.isError)bubble.dataset.error='true';bubble.textContent=(turn.role==='assistant'?'Pi: ':'You: ')+(turn.text||'');wrap.appendChild(bubble);});const form=document.createElement('div');form.className='pi-qa-form';form.innerHTML='<textarea class="pi-qa-input" placeholder="Ask Pi about this comment..."></textarea><button type="button" class="pi-qa-send">Ask</button>';const input=form.querySelector('.pi-qa-input');const send=form.querySelector('.pi-qa-send');const submit=()=>{const value=input.value.trim();if(!value)return;input.value='';askPi(annotation,value,send);};send.addEventListener('click',submit);input.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();submit();}});wrap.appendChild(form);return wrap;}
+function renderAnnotations(){syncReviewMeta();if(state.annotations.length===0){annotationsEl.innerHTML='<div class="pi-review-empty"><div class="pi-review-empty-icon">·</div><div>Click any block in the plan to leave a note.</div></div>';return;}annotationsEl.innerHTML='';state.annotations.forEach((annotation)=>{annotation.conversation=Array.isArray(annotation.conversation)?annotation.conversation:[];const item=document.createElement('article');item.className='pi-comment-card';if(annotation.id===state.recentId){item.dataset.recent='true';}const snippetHtml=annotation.markId&&annotation.textSnippet?'<div class="pi-comment-snippet">“'+escapeHtml(annotation.textSnippet.slice(0,140))+(annotation.textSnippet.length>140?'…':'')+'”</div>':'';item.innerHTML='<button type="button" class="pi-comment-anchor">→ '+escapeHtml(annotation.targetTitle||annotation.targetId||'General comment')+(annotation.markId?' · selection':'')+'</button>'+snippetHtml+'<p class="pi-comment-body">'+escapeHtml(annotation.comment)+'</p><div class="pi-comment-actions"><button type="button" class="pi-review-edit">Edit</button><button type="button" class="pi-review-ask">Ask Pi</button><button type="button" class="pi-review-remove">Remove</button></div>';const focusBlock=()=>{if(annotation.markId){const mark=document.querySelector('mark.pi-review-mark[data-annotation-id="'+CSS.escape(annotation.markId)+'"]');if(mark){mark.scrollIntoView({behavior:'smooth',block:'center'});mark.classList.add('pi-review-mark-pulse');setTimeout(()=>mark.classList.remove('pi-review-mark-pulse'),1200);state.pendingAnnotationId=annotation.id;state.pendingMarkId=annotation.markId;state.pendingSnippet=annotation.textSnippet;const block=mark.closest('[data-review-id]')||state.blocks[0];openComposer(block,annotation,{title:'Edit comment on selection'});return;}}if(annotation.targetId){const target=document.querySelector('[data-review-id="'+CSS.escape(annotation.targetId)+'"]');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});openComposer(target,annotation);}}};item.querySelector('.pi-comment-anchor')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-edit')?.addEventListener('click',focusBlock);item.querySelector('.pi-review-ask')?.addEventListener('click',()=>{item.classList.toggle('pi-qa-open');const input=item.querySelector('.pi-qa-input');if(input&&item.classList.contains('pi-qa-open'))input.focus();});item.querySelector('.pi-review-remove')?.addEventListener('click',()=>{if(annotation.markId){const mark=document.querySelector('mark.pi-review-mark[data-annotation-id="'+CSS.escape(annotation.markId)+'"]');if(mark){const parent=mark.parentNode;while(mark.firstChild)parent.insertBefore(mark.firstChild,mark);parent.removeChild(mark);parent.normalize&&parent.normalize();}}state.annotations=state.annotations.filter((entry)=>entry.id!==annotation.id);renderAnnotations();updateBadges();});item.appendChild(renderThread(annotation));if(annotation.conversation.length>0)item.classList.add('pi-qa-open');annotationsEl.appendChild(item);});}
+function addGeneralComment(){const existing={id:crypto.randomUUID(),targetId:null,targetTitle:'General comment',comment:'',textSnippet:null};closeComposer();clearSelected();const drawer=document.createElement('div');drawer.className='pi-global-composer';drawer.innerHTML='<div class="pi-inline-composer-card"><div class="pi-inline-composer-header"><strong>General comment</strong><button type="button" class="pi-inline-close" aria-label="Close">×</button></div><textarea class="pi-inline-textarea" placeholder="General feedback about the plan"></textarea><div class="pi-inline-actions"><div class="pi-inline-hint">⌘↵ save · Esc cancel</div><button type="button" class="pi-inline-save">Save</button></div></div>';document.body.appendChild(drawer);state.composer=drawer;state.composerMode='general';state.editingId=existing.id;const textarea=drawer.querySelector('.pi-inline-textarea');const close=()=>{closeComposer();};const save=()=>{const comment=textarea.value.trim();if(!comment){showStatus('Write a comment first.','error');return;}state.annotations.push({...existing,comment,conversation:[],createdAt:new Date().toISOString()});renderAnnotations();close();clearStatus();showStatus('General comment saved.','success');};drawer.querySelector('.pi-inline-save')?.addEventListener('click',save);drawer.querySelector('.pi-inline-close')?.addEventListener('click',close);textarea.addEventListener('keydown',(event)=>{if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();save();}if(event.key==='Escape'){event.preventDefault();close();}});textarea.focus();}
 function showSubmittedOverlay(count){const overlay=document.createElement('div');overlay.id='pi-submitted-overlay';overlay.innerHTML='<div class="pi-submitted-card"><div class="pi-submitted-check">✓</div><h2>Review submitted</h2><p>'+count+' '+(count===1?'comment':'comments')+' sent back to Pi.</p><p class="pi-submitted-hint">You can close this tab.</p><button type="button" id="pi-submitted-close">Close tab</button></div>';document.body.appendChild(overlay);const tryClose=()=>{try{window.close();}catch(e){}};document.getElementById('pi-submitted-close')?.addEventListener('click',tryClose);setTimeout(tryClose,400);}
 async function submitReview(){if(submitButton)submitButton.disabled=true;showStatus('Submitting...','info');try{const payload={planFile:window.__PI_HTML_REVIEW__?.sourcePath,sourcePath:window.__PI_HTML_REVIEW__?.sourcePath,submittedAt:new Date().toISOString(),reviewSummary:summaryEl.value.trim(),annotations:state.annotations};const response=await fetch('/api/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw new Error(result.error||'Submission failed');closeComposer();clearSelected();showSubmittedOverlay(result.annotationCount||0);}catch(error){if(submitButton)submitButton.disabled=false;showStatus(error?.message||'Submission failed','error');}}
 document.getElementById('pi-add-general')?.addEventListener('click',addGeneralComment);
@@ -214,9 +330,11 @@ body{padding-right:min(28vw,400px)!important;padding-bottom:0!important;box-sizi
 .pi-comment-body{margin:0;font-size:13px;line-height:1.5;color:#d7e0ea;word-break:break-word}
 .pi-comment-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:6px;opacity:0;transition:opacity .15s ease;pointer-events:none}
 .pi-comment-card:hover .pi-comment-actions,.pi-comment-card:focus-within .pi-comment-actions,.pi-comment-card[data-recent="true"] .pi-comment-actions{opacity:1;pointer-events:auto}
-.pi-review-edit,.pi-review-remove{padding:4px 8px!important;border-radius:6px!important;font-size:11px!important;font-weight:600!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(148,163,184,.18)!important}
+.pi-review-edit,.pi-review-ask,.pi-review-remove{padding:4px 8px!important;border-radius:6px!important;font-size:11px!important;font-weight:600!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(148,163,184,.18)!important}
 .pi-review-edit{color:#8ea0b8!important}
 .pi-review-edit:hover{color:#ecf2f8!important;border-color:rgba(103,210,231,.35)!important}
+.pi-review-ask{color:#67d2e7!important}
+.pi-review-ask:hover{color:#a5e8f3!important;border-color:rgba(103,210,231,.45)!important;background:rgba(103,210,231,.08)!important}
 .pi-review-remove{color:#fda4af!important}
 .pi-review-remove:hover{color:#fff!important;background:rgba(190,18,60,.25)!important;border-color:rgba(253,164,175,.45)!important}
 [data-review-id]{scroll-margin-top:32px;position:relative}
@@ -258,6 +376,17 @@ mark.pi-review-mark-pulse{animation:pi-mark-pulse 1.2s ease}
 .pi-selection-popover{position:fixed;z-index:2147483002;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;border:1px solid rgba(103,210,231,.22);background:linear-gradient(180deg,rgba(18,26,39,.98),rgba(15,23,42,.98));color:#ecf2f8;font-size:12px;font-weight:600;letter-spacing:.01em;cursor:pointer;box-shadow:0 18px 38px rgba(2,8,23,.42);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:border-color .15s ease,color .15s ease,box-shadow .15s ease}
 .pi-selection-popover:hover{border-color:rgba(103,210,231,.45);color:#67d2e7;box-shadow:0 22px 46px rgba(2,8,23,.5)}
 .pi-comment-snippet{margin:0 0 6px;padding:6px 8px;border-left:2px solid rgba(103,210,231,.4);background:rgba(103,210,231,.06);font-size:12px;color:#a5e8f3;font-style:italic;word-break:break-word;border-radius:0 6px 6px 0}
+.pi-qa-thread{display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(103,210,231,.10);gap:7px;flex-direction:column}
+.pi-comment-card.pi-qa-open .pi-qa-thread{display:flex}
+.pi-qa-bubble{padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.45;word-break:break-word;white-space:pre-wrap}
+.pi-qa-user{align-self:flex-end;max-width:92%;background:rgba(103,210,231,.12);color:#dff8fc;border:1px solid rgba(103,210,231,.16)}
+.pi-qa-assistant{align-self:flex-start;max-width:96%;background:rgba(255,255,255,.045);color:#d7e0ea;border:1px solid rgba(148,163,184,.14)}
+.pi-qa-assistant[data-error="true"]{background:rgba(190,18,60,.14);border-color:rgba(253,164,175,.24);color:#fda4af}
+.pi-qa-form{display:flex;gap:6px;align-items:flex-end;margin-top:2px}
+.pi-qa-input{flex:1;min-height:38px;max-height:110px;padding:8px 9px;border:1px solid rgba(103,210,231,.20);border-radius:9px;background:rgba(9,14,24,.62);color:#ecf2f8;font-size:12px;line-height:1.4;resize:vertical}
+.pi-qa-input::placeholder{color:#64748b}
+.pi-qa-input:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 2px rgba(103,210,231,.12)}
+.pi-qa-send{flex:0 0 auto;background:#0f766e!important;border-color:#0f766e!important;color:#fff!important;padding:8px 10px!important;border-radius:9px!important}
 @media (max-width: 960px){body{padding-right:0!important;padding-bottom:48vh!important}#pi-plan-review-root{left:0;right:0;top:auto;width:100vw;min-width:0;height:48vh}#pi-plan-review-footer{padding:10px 12px 12px}.pi-inline-composer{left:12px!important;right:12px!important;top:auto!important;bottom:12px!important;width:auto!important}.pi-inline-composer::before{display:none}.pi-global-composer{left:12px;right:12px;bottom:12px;width:auto}}
 </style>
 <div id="pi-plan-review-root">${sidebarMarkup}</div>
@@ -303,11 +432,11 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	async function launchReview(sourcePathInput: string, cwd: string) {
-		const sourcePath = path.resolve(cwd, sourcePathInput);
+	async function launchReview(sourcePathInput: string, ctx: any) {
+		const sourcePath = path.resolve(ctx.cwd, sourcePathInput);
 		const sourceHtml = await fs.readFile(sourcePath, "utf8");
 		const slug = slugify(path.basename(sourcePath, path.extname(sourcePath)));
-		const reviewDir = path.join(cwd, REVIEW_ROOT, slug);
+		const reviewDir = path.join(ctx.cwd, REVIEW_ROOT, slug);
 		const submissionsDir = path.join(reviewDir, "submissions");
 		await fs.mkdir(submissionsDir, { recursive: true });
 
@@ -318,6 +447,18 @@ export default function (pi: ExtensionAPI) {
 				if (req.method === "GET" && (req.url === "/" || req.url === "")) {
 					res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
 					res.end(injectReviewClient(sourceHtml, { sourcePath }));
+					return;
+				}
+
+				if (req.method === "POST" && req.url === "/api/ask") {
+					const chunks: Buffer[] = [];
+					for await (const chunk of req) {
+						chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+					}
+					const payload = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+					const answer = await answerReviewQuestion(ctx, sourceHtml, payload);
+					res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+					res.end(JSON.stringify({ ok: true, answer }));
 					return;
 				}
 
@@ -387,7 +528,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		try {
-			const result = await launchReview(fileArg, ctx.cwd);
+			const result = await launchReview(fileArg, ctx);
 			ctx.ui.notify(`Opened plan review: ${result.url}`, "info");
 			ctx.ui.notify(`Review files will be saved in ${result.reviewDir}`, "info");
 		} catch (error: any) {
@@ -427,7 +568,7 @@ export default function (pi: ExtensionAPI) {
 			path: Type.String({ description: "Path to the HTML file to review" }),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const result = await launchReview(params.path, ctx.cwd);
+			const result = await launchReview(params.path, ctx);
 			return {
 				content: [{ type: "text", text: `Opened HTML review for ${result.sourcePath}. Review URL: ${result.url}` }],
 				details: result,

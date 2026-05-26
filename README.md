@@ -9,6 +9,7 @@ Pi package for reviewing generated HTML plans in the browser.
 - Keeps the sidebar minimal with overall review + compact comment list
 - Saves submissions as JSON and Markdown
 - Sends the submitted review back into the Pi session
+- Lets reviewers ask short inline follow-up questions from comment cards, answered with the current Pi session context
 
 ## Commands
 
