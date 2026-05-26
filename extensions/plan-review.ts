@@ -356,6 +356,7 @@ body{padding-right:min(28vw,400px)!important;padding-bottom:0!important;box-sizi
 .pi-inline-textarea{width:100%;min-height:110px;padding:12px;border:1px solid rgba(103,210,231,.32);border-radius:12px;background:rgba(9,14,24,.72);color:#ecf2f8;font-size:13px;resize:vertical}
 .pi-inline-textarea::placeholder{color:#8ea0b8}
 .pi-inline-textarea:focus{outline:none;border-color:#67d2e7;box-shadow:0 0 0 3px rgba(103,210,231,.14)}
+.pi-inline-composer.pi-composer-chatting .pi-inline-textarea{min-height:48px;max-height:96px;padding:10px;line-height:1.35}
 .pi-inline-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .pi-inline-buttons{display:flex;gap:8px;align-items:center}
 .pi-inline-composer .pi-inline-save,.pi-global-composer .pi-inline-save{background:#0f766e!important;border-color:#0f766e!important;color:#fff!important;border-radius:10px!important;padding:8px 14px!important;font-weight:600!important}
