@@ -1,11 +1,11 @@
 ---
 name: human-review
-description: Convert structured content into a standardized, review-ready HTML document with stable block ids for pi-inquire, then open it for in-page questions and review. Use whenever the user wants to take a written artifact — plan, notes, spec, design doc, RFC, refactor proposal, roadmap, recap, research notes, diff summary, post-mortem, checklist, or any other structured content — and produce an HTML version that can be reviewed block-by-block inside the browser surface. Invoke via /skill:human-review. Also use proactively when the user mentions "review this in the browser", "open this for review", "make this reviewable", "convert this to review HTML", or shares structured content and follows up about reviewing it.
+description: Convert structured content into a standardized, review-ready HTML document with stable block ids for pi-human-inquire, then open it for in-page questions and review. Use whenever the user wants to take a written artifact — plan, notes, spec, design doc, RFC, refactor proposal, roadmap, recap, research notes, diff summary, post-mortem, checklist, or any other structured content — and produce an HTML version that can be reviewed block-by-block inside the browser surface. Invoke via /skill:human-review. Also use proactively when the user mentions "review this in the browser", "open this for review", "make this reviewable", "convert this to review HTML", or shares structured content and follows up about reviewing it.
 ---
 
 # human-review
 
-This skill produces **review-ready HTML documents** for pi-inquire and opens them for in-page questions and human review. It is content-agnostic: the input can be a plan, notes, spec, RFC, design doc, recap, research note, diff summary, post-mortem, checklist, or any other structured content.
+This skill produces **review-ready HTML documents** for pi-human-inquire and opens them for in-page questions and human review. It is content-agnostic: the input can be a plan, notes, spec, RFC, design doc, recap, research note, diff summary, post-mortem, checklist, or any other structured content.
 
 Output must always:
 
@@ -69,7 +69,7 @@ Use this skill when the user asks to:
 - "turn this into review HTML"
 - "make this reviewable"
 - "regenerate the review HTML"
-- prepare any structured document for pi-inquire
+- prepare any structured document for pi-human-inquire
 
 Also run automatically when invoked via `/skill:human-review`, even with no extra prompt.
 
@@ -106,7 +106,7 @@ The HTML must be standalone and self-contained.
 </html>
 ```
 
-Note: the root element keeps `class="plan"` and `data-review-id="doc-root"` for compatibility with the current pi-inquire review block contract. Do not rename these.
+Note: the root element keeps `class="plan"` and `data-review-id="doc-root"` for compatibility with the current pi-human-inquire review block contract. Do not rename these.
 
 ## Deriving block structure
 

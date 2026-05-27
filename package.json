@@ -1,8 +1,8 @@
 {
-  "name": "pi-inquire",
+  "name": "pi-human-inquire",
   "version": "0.1.0",
   "private": true,
-  "description": "Turn structured content into reviewable HTML with in-page questions, threaded discussion, and feedback.",
+  "description": "Human-in-the-loop document inquiry and feedback for Pi.",
   "keywords": ["pi-package"],
   "pi": {
     "extensions": ["./extensions"],

@@ -60,7 +60,7 @@ function buildReviewSummary(payload: any, jsonPath: string, markdownPath: string
 function toMarkdown(payload: any, jsonPath: string): string {
 	const annotations = Array.isArray(payload?.annotations) ? payload.annotations : [];
 	const lines = [
-		"# Pi Inquire Submission",
+		"# pi-human-inquire Submission",
 		"",
 		`- Source file: \`${payload?.sourcePath ?? payload?.planFile ?? "unknown"}\``,
 		`- Submitted at: ${payload?.submittedAt ?? new Date().toISOString()}`,
@@ -534,7 +534,7 @@ export default function (pi: ExtensionAPI) {
 
 		try {
 			const result = await launchReview(fileArg, ctx);
-			ctx.ui.notify(`Opened Pi Inquire: ${result.url}`, "info");
+			ctx.ui.notify(`Opened pi-human-inquire: ${result.url}`, "info");
 			ctx.ui.notify(`Review files will be saved in ${result.reviewDir}`, "info");
 		} catch (error: any) {
 			ctx.ui.notify(`Failed to open HTML review: ${error?.message ?? error}`, "error");
@@ -542,7 +542,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("annotate-html", {
-		description: "Open reviewable HTML in pi-inquire with questions, comments, and submission",
+		description: "Open reviewable HTML in pi-human-inquire with questions, comments, and submission",
 		handler: openReviewCommand,
 	});
 
@@ -566,11 +566,11 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "open_html_review",
 		label: "Open HTML Review",
-		description: "Open reviewable HTML in pi-inquire with inline questions and feedback support",
+		description: "Open reviewable HTML in pi-human-inquire with inline questions and feedback support",
 		promptSnippet: "Open reviewable HTML for in-page questions, threaded discussion, and feedback.",
 		promptGuidelines: ["Use open_html_review when the user wants to open reviewable HTML for in-page questions, threaded discussion, comments, and feedback submission."],
 		parameters: Type.Object({
-			path: Type.String({ description: "Path to the HTML file to open in pi-inquire" }),
+			path: Type.String({ description: "Path to the HTML file to open in pi-human-inquire" }),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const result = await launchReview(params.path, ctx);

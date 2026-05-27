@@ -1,6 +1,6 @@
-# pi-inquire
+# pi-human-inquire
 
-pi-inquire turns plans, notes, specs, RFCs, recaps, research, diffs, and other structured content into reviewable HTML, then lets you ask questions and leave feedback directly inside the document.
+pi-human-inquire turns plans, notes, specs, RFCs, recaps, research, diffs, and other structured content into reviewable HTML where humans can ask agent questions and leave feedback directly inside the document.
 
 It includes:
 
@@ -14,19 +14,19 @@ Pi packages can be installed from git, npm, or a local path. Git is the recommen
 ### Try without installing
 
 ```bash
-pi -e git:github.com/alpeshvas/pi-inquire
+pi -e git:github.com/alpeshvas/pi-human-inquire
 ```
 
 ### Install globally
 
 ```bash
-pi install git:github.com/alpeshvas/pi-inquire
+pi install git:github.com/alpeshvas/pi-human-inquire
 ```
 
 ### Install for a project
 
 ```bash
-pi install -l git:github.com/alpeshvas/pi-inquire
+pi install -l git:github.com/alpeshvas/pi-human-inquire
 ```
 
 ## Usage
