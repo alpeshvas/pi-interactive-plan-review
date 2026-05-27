@@ -1,8 +1,14 @@
 {
   "name": "pi-human-inquire",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Human-in-the-loop document inquiry and feedback for Pi.",
-  "keywords": ["pi-package", "pi", "human-in-the-loop", "review", "html-review"],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "human-in-the-loop",
+    "review",
+    "html-review"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,10 +18,18 @@
     "url": "https://github.com/alpeshvas/pi-human-inquire/issues"
   },
   "homepage": "https://github.com/alpeshvas/pi-human-inquire#readme",
-  "files": ["README.md", "extensions", "skills"],
+  "files": [
+    "README.md",
+    "extensions",
+    "skills"
+  ],
   "pi": {
-    "extensions": ["./extensions/plan-review.ts"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extensions/plan-review.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
