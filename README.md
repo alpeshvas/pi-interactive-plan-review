@@ -2,72 +2,14 @@
 
 pi-inquire turns plans, notes, specs, RFCs, recaps, research, diffs, and other structured content into reviewable HTML, then lets you ask questions and leave feedback directly inside the document.
 
-Use the included skill to generate review-ready HTML from structured content, or open an existing HTML document. Click any block to ask Pi contextual questions, discuss details in threads, add targeted comments, and submit structured feedback back into the active Pi session.
+It includes:
 
-## Features
-
-- Generates review-ready HTML from structured content with the included `human-review` skill
-- Opens existing HTML documents in an interactive browser surface
-- Adds a fixed side panel for notes, questions, and submission
-- Lets users click any reviewable block to comment or ask Pi
-- Supports targeted comments on selected text
-- Supports threaded Q&A on each comment
-- Answers questions using the selected block, document text, existing comments, thread history, and recent Pi session context
-- Supports general document-level notes and an overall summary
-- Shows comment badges on annotated blocks
-- Lets users edit, remove, and revisit comments
-- Saves submissions as JSON and Markdown
-- Writes `latest.json` and `latest.md` snapshots
-- Sends submitted feedback back into the active Pi session
-- Runs a temporary local browser server and shuts it down after submission
-
-## Commands
-
-Primary command:
-
-```bash
-/annotate-html <path-to-html>
-```
-
-Compatibility alias:
-
-```bash
-/annotate-plan-html <path-to-html>
-```
-
-Stop the active browser server:
-
-```bash
-/annotate-html-stop
-```
-
-## Tool
-
-- `open_html_review`
-
-Use this tool when Pi should open reviewable HTML for in-page questions, comments, threaded discussion, and feedback submission.
-
-## Skill
-
-This package includes the `human-review` skill.
-
-The skill converts structured content into standalone review-ready HTML with stable `data-review-id` blocks, then opens it in pi-inquire. Supported inputs include:
-
-- plans
-- notes
-- specs
-- RFCs
-- design docs
-- recaps
-- research notes
-- diff summaries
-- post-mortems
-- checklists
-- other structured content
+- a `human-review` skill that creates reviewable HTML from structured content
+- a browser surface for comments, contextual questions, threaded discussion, and feedback submission
 
 ## Install
 
-Pi packages can be installed from git, npm, or a local path. For this package, git is the recommended install path.
+Pi packages can be installed from git, npm, or a local path. Git is the recommended install path once the repo is published/renamed.
 
 ### Try without installing
 
@@ -75,23 +17,19 @@ Pi packages can be installed from git, npm, or a local path. For this package, g
 pi -e git:github.com/alpeshvas/pi-inquire
 ```
 
-### Install globally into Pi
+### Install globally
 
 ```bash
 pi install git:github.com/alpeshvas/pi-inquire
 ```
 
-### Install project-local into Pi
-
-Project-local installs are written to `.pi/settings.json`, so teammates using the project can get the package automatically on Pi startup.
+### Install for a project
 
 ```bash
 pi install -l git:github.com/alpeshvas/pi-inquire
 ```
 
-### Install from a local checkout
-
-Useful while developing the package:
+### Local development
 
 ```bash
 pi -e /Users/alpesh/codebase/pi-plan-review
@@ -101,25 +39,82 @@ pi install -l /Users/alpesh/codebase/pi-plan-review
 
 ## Usage
 
-Generate review-ready HTML from structured content with the `human-review` skill, or open an existing HTML document:
+### Generate reviewable HTML from content
 
-```bash
+Use the skill:
+
+```text
+/skill:human-review
+```
+
+You can invoke it with no arguments, with a file path, or with an instruction:
+
+```text
+/skill:human-review notes.md
+/skill:human-review turn this RFC into review HTML
+/skill:human-review make the previous plan reviewable
+```
+
+The skill uses the provided content, or the most recent structured content in the conversation. It then creates an HTML file and opens it in the browser. If it cannot find suitable content, it asks you for a path or content.
+
+### Open existing HTML
+
+If you already have an HTML file:
+
+```text
 /annotate-html /absolute/path/to/document.html
 ```
 
-Inside the browser surface, you can:
+Legacy alias:
 
-- click a block to leave feedback or ask Pi about that part
-- select text to create a targeted comment
-- add a general note with `+ Note`
-- continue threaded Q&A from a comment card
-- submit all notes back into the Pi session
+```text
+/annotate-plan-html /absolute/path/to/document.html
+```
+
+Stop the active browser server:
+
+```text
+/annotate-html-stop
+```
+
+## Browser surface
+
+In the browser, you can:
+
+- click any block to ask Pi a question or leave feedback
+- select text to add a targeted comment
+- continue threaded Q&A on comments
+- add general document-level notes
+- edit or remove comments
+- submit feedback back into the active Pi session
+
+Pi answers using the document, selected block, existing comments, thread history, and recent session context.
+
+## Skill options
+
+Use lite mode for quick/minimal output:
+
+```text
+/skill:human-review --lite notes.md
+```
+
+Use stubs when iterating on a plan or spec and you want sections to remain stable across revisions:
+
+```text
+/skill:human-review --with-stubs spec.md
+```
+
+By default, generated HTML is written to:
+
+```text
+~/.agent/diagrams/<slug>.html
+```
 
 ## Output
 
-Submissions are stored under the active project's:
+Submitted feedback is saved under the active project:
 
-```bash
+```text
 .pi/html-reviews/<document-name>/
 ```
 
@@ -132,31 +127,22 @@ latest.json
 latest.md
 ```
 
-After submission, pi-inquire also sends a summary back into the current Pi session.
+A summary is also sent back into the current Pi session.
 
-## Reviewable HTML blocks
+## Tool
 
-pi-inquire works best when the HTML contains stable review IDs:
+This package exposes:
 
-```html
-<section data-review-id="architecture" data-review-title="Architecture">
-  ...
-</section>
+```text
+open_html_review
 ```
 
-If IDs are missing, pi-inquire infers reviewable blocks from common document elements such as sections, articles, cards, phases, and API rows.
-
-## Keyboard shortcuts
-
-- `Cmd/Ctrl + Enter` in a composer: save or send
-- `Esc` in a composer: cancel
-- `Cmd/Ctrl + Enter` in the side panel: submit
+The `human-review` skill uses it automatically. Agents can also call it directly to open an HTML file in pi-inquire.
 
 ## Compatibility notes
 
-The package keeps a few legacy names for compatibility:
+For now, a few legacy names remain for compatibility:
 
 - `/annotate-plan-html` remains an alias for `/annotate-html`
 - submissions still write to `.pi/html-reviews/`
 - the tool is still named `open_html_review`
-- generated review HTML may still use `class="plan"` as part of the review block contract
