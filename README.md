@@ -95,7 +95,7 @@ flowchart TD
   BR --> M["Active Pi model<br/>for threaded agent Q and A"]
   M --> B
 
-  B --> F["pi.sendUserMessage<br/>submitted feedback as follow-up"]
+  B --> F["pi.sendUserMessage<br/>deliverAs: followUp"]
   F --> PI["Active Pi session"]
 ```
 
