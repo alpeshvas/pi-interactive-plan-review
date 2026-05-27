@@ -17,6 +17,8 @@ Output must always:
 
 **When this skill is invoked, immediately execute the full flow. Do not just describe the skill or ask what to do.**
 
+When invoked, your only task is to create and open the reviewable HTML document. Stop after reporting the saved path and reopen command. Do not perform source edits, critique the source in chat, or continue implementation work.
+
 Steps to run by default:
 
 1. Identify the source content, in this priority order:
@@ -39,6 +41,24 @@ Steps to run by default:
    - they can also reopen later with: `/annotate-html <path>`
 
 Do not output the HTML inline in the chat. Always write to a file and open it.
+
+## Important: invocation intent
+
+If this skill is invoked or its content is shown with a target artifact path/content, treat that as a request to generate and open reviewable HTML for the artifact.
+
+Do not interpret the invocation as a request to critique, summarize, or edit the artifact in chat.
+
+Do not modify the source artifact unless the user explicitly asks for edits after submitting review feedback.
+
+Examples:
+
+- User: `/skill:human-review README.md`
+  - Correct: generate review HTML from `README.md`, write it to file, open with `open_html_review`.
+  - Incorrect: review `README.md` in chat or edit `README.md`.
+
+- User provides this skill context followed by `README.md`
+  - Correct: treat `README.md` as the source content/path and run the review HTML flow.
+  - Incorrect: analyze README against the skill instructions and change files.
 
 ## When to use
 
@@ -469,6 +489,8 @@ Always finish by:
      ```
 
 Only skip the auto-open step if the user explicitly says they do not want it opened.
+
+After opening the review surface, stop. Wait for submitted review feedback or an explicit follow-up instruction before making any edits.
 
 ## Quality checks
 
