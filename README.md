@@ -9,7 +9,7 @@ It includes:
 
 ## Install
 
-Pi packages can be installed from git, npm, or a local path. Git is the recommended install path once the repo is published/renamed.
+Pi packages can be installed from npm, git, or a local path.
 
 ### Try without installing
 
@@ -33,6 +33,34 @@ pi install -l npm:pi-human-inquire
 
 ```bash
 pi install git:github.com/alpeshvas/pi-human-inquire
+```
+
+## Run from source
+
+Pi loads TypeScript extensions directly, so there is no build step. To inspect and run the package from source:
+
+```bash
+git clone https://github.com/alpeshvas/pi-human-inquire.git
+cd pi-human-inquire
+pi -e .
+```
+
+To install the local checkout globally:
+
+```bash
+pi install .
+```
+
+Or for just the current project:
+
+```bash
+pi install -l .
+```
+
+You can also preview the npm package contents before publishing or installing:
+
+```bash
+npm pack --dry-run
 ```
 
 ## Usage
