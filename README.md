@@ -67,22 +67,36 @@ The skill converts structured content into standalone review-ready HTML with sta
 
 ## Install
 
-### Try directly from local path
+Pi packages can be installed from git, npm, or a local path. For this package, git is the recommended install path.
+
+### Try without installing
 
 ```bash
-pi -e /Users/alpesh/codebase/pi-inquire
+pi -e git:github.com/alpeshvas/pi-inquire
 ```
 
 ### Install globally into Pi
 
 ```bash
-pi install /Users/alpesh/codebase/pi-inquire
+pi install git:github.com/alpeshvas/pi-inquire
 ```
 
 ### Install project-local into Pi
 
+Project-local installs are written to `.pi/settings.json`, so teammates using the project can get the package automatically on Pi startup.
+
 ```bash
-pi install -l /Users/alpesh/codebase/pi-inquire
+pi install -l git:github.com/alpeshvas/pi-inquire
+```
+
+### Install from a local checkout
+
+Useful while developing the package:
+
+```bash
+pi -e /Users/alpesh/codebase/pi-plan-review
+pi install /Users/alpesh/codebase/pi-plan-review
+pi install -l /Users/alpesh/codebase/pi-plan-review
 ```
 
 ## Usage
