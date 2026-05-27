@@ -91,7 +91,8 @@ flowchart TD
   T --> B["Browser review page"]
   C --> B
 
-  B --> M["Active Pi model<br/>for threaded agent Q and A"]
+  B --> BR["ctx.sessionManager.getBranch<br/>recent session context"]
+  BR --> M["Active Pi model<br/>for threaded agent Q and A"]
   M --> B
 
   B --> F["pi.sendUserMessage<br/>submitted feedback as follow-up"]
