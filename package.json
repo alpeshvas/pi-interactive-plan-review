@@ -6,12 +6,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alpeshvas/pi-interactive-plan-review.git"
+    "url": "git+https://github.com/alpeshvas/pi-human-inquire.git"
   },
   "bugs": {
-    "url": "https://github.com/alpeshvas/pi-interactive-plan-review/issues"
+    "url": "https://github.com/alpeshvas/pi-human-inquire/issues"
   },
-  "homepage": "https://github.com/alpeshvas/pi-interactive-plan-review#readme",
+  "homepage": "https://github.com/alpeshvas/pi-human-inquire#readme",
   "files": ["README.md", "extensions", "skills"],
   "pi": {
     "extensions": ["./extensions/plan-review.ts"],

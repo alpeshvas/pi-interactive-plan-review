@@ -32,7 +32,7 @@ pi install -l npm:pi-human-inquire
 ### Install from git
 
 ```bash
-pi install git:github.com/alpeshvas/pi-interactive-plan-review
+pi install git:github.com/alpeshvas/pi-human-inquire
 ```
 
 ## Usage
