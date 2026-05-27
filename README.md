@@ -14,19 +14,25 @@ Pi packages can be installed from git, npm, or a local path. Git is the recommen
 ### Try without installing
 
 ```bash
-pi -e git:github.com/alpeshvas/pi-human-inquire
+pi -e npm:pi-human-inquire
 ```
 
 ### Install globally
 
 ```bash
-pi install git:github.com/alpeshvas/pi-human-inquire
+pi install npm:pi-human-inquire
 ```
 
 ### Install for a project
 
 ```bash
-pi install -l git:github.com/alpeshvas/pi-human-inquire
+pi install -l npm:pi-human-inquire
+```
+
+### Install from git
+
+```bash
+pi install git:github.com/alpeshvas/pi-interactive-plan-review
 ```
 
 ## Usage

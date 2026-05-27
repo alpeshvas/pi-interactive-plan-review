@@ -1,9 +1,18 @@
 {
   "name": "pi-human-inquire",
   "version": "0.1.0",
-  "private": true,
   "description": "Human-in-the-loop document inquiry and feedback for Pi.",
-  "keywords": ["pi-package"],
+  "keywords": ["pi-package", "pi", "human-in-the-loop", "review", "html-review"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alpeshvas/pi-interactive-plan-review.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alpeshvas/pi-interactive-plan-review/issues"
+  },
+  "homepage": "https://github.com/alpeshvas/pi-interactive-plan-review#readme",
+  "files": ["README.md", "extensions", "skills"],
   "pi": {
     "extensions": ["./extensions/plan-review.ts"],
     "skills": ["./skills"]
