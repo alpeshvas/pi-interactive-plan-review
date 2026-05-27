@@ -5,7 +5,7 @@
   "description": "Human-in-the-loop document inquiry and feedback for Pi.",
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./extensions"],
+    "extensions": ["./extensions/plan-review.ts"],
     "skills": ["./skills"]
   },
   "peerDependencies": {
