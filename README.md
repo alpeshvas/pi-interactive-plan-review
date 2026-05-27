@@ -29,14 +29,6 @@ pi install git:github.com/alpeshvas/pi-inquire
 pi install -l git:github.com/alpeshvas/pi-inquire
 ```
 
-### Local development
-
-```bash
-pi -e /Users/alpesh/codebase/pi-plan-review
-pi install /Users/alpesh/codebase/pi-plan-review
-pi install -l /Users/alpesh/codebase/pi-plan-review
-```
-
 ## Usage
 
 ### Generate reviewable HTML from content
@@ -71,24 +63,18 @@ Legacy alias:
 /annotate-plan-html /absolute/path/to/document.html
 ```
 
-Stop the active browser server:
-
-```text
-/annotate-html-stop
-```
-
 ## Browser surface
 
-In the browser, you can:
+In the opened HTML review page, you can:
 
-- click any block to ask Pi a question or leave feedback
-- select text to add a targeted comment
-- continue threaded Q&A on comments
-- add general document-level notes
+- click any block to ask agent questions or leave feedback
+- select text for comments
+- continue threaded agent Q&A in place
+- add document-level notes
 - edit or remove comments
 - submit feedback back into the active Pi session
 
-Pi answers using the document, selected block, existing comments, thread history, and recent session context.
+Agent answers use the document, current block, selected text, existing comments, thread history, and recent session context.
 
 ## Skill options
 
@@ -110,39 +96,10 @@ By default, generated HTML is written to:
 ~/.agent/diagrams/<slug>.html
 ```
 
-## Output
+## Feedback submission
 
-Submitted feedback is saved under the active project:
-
-```text
-.pi/html-reviews/<document-name>/
-```
-
-Each submission writes:
-
-```text
-submissions/<timestamp>.json
-submissions/<timestamp>.md
-latest.json
-latest.md
-```
-
-A summary is also sent back into the current Pi session.
-
-## Tool
-
-This package exposes:
-
-```text
-open_html_review
-```
-
-The `human-review` skill uses it automatically. Agents can also call it directly to open an HTML file in pi-inquire.
+Submitted feedback is saved locally and sent back into the active Pi session.
 
 ## Compatibility notes
 
-For now, a few legacy names remain for compatibility:
-
-- `/annotate-plan-html` remains an alias for `/annotate-html`
-- submissions still write to `.pi/html-reviews/`
-- the tool is still named `open_html_review`
+For now, `/annotate-plan-html` remains an alias for `/annotate-html`.
