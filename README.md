@@ -80,38 +80,22 @@ Agent answers use the document, current block, selected text, existing comments,
 
 ```mermaid
 flowchart TD
-  P["Pi package manifest<br/>package.json pi.extensions + pi.skills"] --> S["human-review skill<br/>/skill:human-review"]
-  P --> E["extension<br/>extensions/plan-review.ts"]
+  P["Pi package<br/>package.json"] --> S["Skill<br/>/skill:human-review"]
+  P --> E["Extension<br/>commands + tool"]
 
-  S --> H["Standalone review HTML<br/>~/.agent/diagrams/&lt;slug&gt;.html"]
-  S --> T["open_html_review tool"]
-
-  E --> C1["/annotate-html command"]
-  E --> C2["/annotate-plan-html alias"]
+  S --> H["Reviewable HTML"]
+  S --> T["open_html_review"]
   E --> T
+  E --> C["/annotate-html"]
 
-  T --> L["launchReview path, ctx"]
-  C1 --> L
-  C2 --> L
+  T --> B["Browser review page"]
+  C --> B
 
-  L --> R["Temporary local server<br/>127.0.0.1 random port"]
-  R --> G["GET /<br/>serves source HTML + injected review UI"]
-  G --> B["Opened HTML review page"]
+  B --> M["Active Pi model<br/>for threaded agent Q and A"]
+  M --> B
 
-  B --> UI["Injected side panel + inline composer"]
-  UI --> A["Block comments<br/>selected-text comments<br/>general notes"]
-  UI --> Q["Threaded agent Q and A"]
-
-  Q --> ASK["POST /api/ask"]
-  ASK --> M["Pi active model via complete"]
-  M --> CTX["Context used:<br/>document text + selected block + comments + thread + recent Pi session"]
-  CTX --> M
-  M --> Q
-
-  UI --> SUB["Submit feedback<br/>POST /api/submit"]
-  SUB --> FS["Saved locally<br/>.pi/html-reviews/&lt;document&gt;/"]
-  SUB --> FUP["pi.sendUserMessage<br/>deliverAs followUp"]
-  FUP --> PI["Active Pi session"]
+  B --> F["pi.sendUserMessage<br/>submitted feedback as follow-up"]
+  F --> PI["Active Pi session"]
 ```
 
 ## Skill options
