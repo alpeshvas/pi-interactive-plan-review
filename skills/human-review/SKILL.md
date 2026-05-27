@@ -1,11 +1,11 @@
 ---
 name: human-review
-description: Convert any text content into a standardized, review-ready HTML document with stable block ids for the pi-plan-review viewer, then open it for human review. Use whenever the user wants to take a written artifact — plan, spec, design doc, RFC, refactor proposal, roadmap, recap, research notes, diff summary, post-mortem, checklist, or any other structured document — and produce an HTML version that can be reviewed block-by-block inside the browser review surface. Invoke via /skill:human-review. Also use proactively when the user mentions "review this in the browser", "open this for review", "make this reviewable", "convert this to review HTML", or shares structured content and follows up about reviewing it.
+description: Convert structured content into a standardized, review-ready HTML document with stable block ids for pi-inquire, then open it for in-page questions and review. Use whenever the user wants to take a written artifact — plan, notes, spec, design doc, RFC, refactor proposal, roadmap, recap, research notes, diff summary, post-mortem, checklist, or any other structured content — and produce an HTML version that can be reviewed block-by-block inside the browser surface. Invoke via /skill:human-review. Also use proactively when the user mentions "review this in the browser", "open this for review", "make this reviewable", "convert this to review HTML", or shares structured content and follows up about reviewing it.
 ---
 
 # human-review
 
-This skill produces **review-ready HTML documents** for the `pi-plan-review` extension and opens them for human review. It is content-agnostic: the input can be a plan, spec, RFC, design doc, recap, research note, diff summary, post-mortem, checklist, or any other structured artifact.
+This skill produces **review-ready HTML documents** for pi-inquire and opens them for in-page questions and human review. It is content-agnostic: the input can be a plan, notes, spec, RFC, design doc, recap, research note, diff summary, post-mortem, checklist, or any other structured content.
 
 Output must always:
 
@@ -36,7 +36,7 @@ Steps to run by default:
 6. Then tell the user:
    - the exact saved path
    - that the review surface is now open in the browser
-   - they can also reopen later with: `/annotate-plan-html <path>`
+   - they can also reopen later with: `/annotate-html <path>`
 
 Do not output the HTML inline in the chat. Always write to a file and open it.
 
@@ -49,7 +49,7 @@ Use this skill when the user asks to:
 - "turn this into review HTML"
 - "make this reviewable"
 - "regenerate the review HTML"
-- prepare any structured document for the `pi-plan-review` viewer
+- prepare any structured document for pi-inquire
 
 Also run automatically when invoked via `/skill:human-review`, even with no extra prompt.
 
@@ -86,7 +86,7 @@ The HTML must be standalone and self-contained.
 </html>
 ```
 
-Note: the root element keeps `class="plan"` and `data-review-id="doc-root"` for compatibility with the `pi-plan-review` viewer. Do not rename these.
+Note: the root element keeps `class="plan"` and `data-review-id="doc-root"` for compatibility with the current pi-inquire review block contract. Do not rename these.
 
 ## Deriving block structure
 
@@ -465,7 +465,7 @@ Always finish by:
    - the reopen command for later use:
 
      ```
-     /annotate-plan-html <path>
+     /annotate-html <path>
      ```
 
 Only skip the auto-open step if the user explicitly says they do not want it opened.

@@ -1,8 +1,8 @@
 {
-  "name": "pi-plan-review",
+  "name": "pi-inquire",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi package for reviewing generated HTML plans in the browser with inline feedback submission.",
+  "description": "Turn structured content into reviewable HTML with in-page questions, threaded discussion, and feedback.",
   "keywords": ["pi-package"],
   "pi": {
     "extensions": ["./extensions"],
